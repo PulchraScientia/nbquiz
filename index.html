@@ -383,7 +383,7 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text); min-hei
   <div class="file-list-wrap">
     <div class="sb-lbl" style="padding:2px 2px 6px">노트북 파일</div>
     <div class="upload-zone" id="dzone">
-      <input type="file" id="file-in" accept=".ipynb,.json,*/*" multiple/>
+      <input type="file" id="file-in" accept="*/*" multiple/>
       <div class="uz-text">📂 파일 추가</div>
       <div class="uz-sub">.ipynb · 여러 파일 가능</div>
     </div>
@@ -722,20 +722,24 @@ dzone.addEventListener('dragleave', () => { dzone.style.borderColor=''; });
 dzone.addEventListener('drop', e => { e.preventDefault(); dzone.style.borderColor=''; loadFiles(e.dataTransfer.files); });
 
 function loadFiles(list) {
-  dbg('loadFiles called, count=' + list.length);
-  if (!list || list.length === 0) { dbg('ERROR: empty file list'); toast('⚠ 파일을 선택해주세요'); return; }
+  dbg('loadFiles called, count=' + (list ? list.length : 'null'));
+  if (!list || list.length === 0) { toast('⚠ 파일을 선택해주세요'); return; }
   Array.from(list).forEach(f => {
-    dbg('file: name=' + f.name + ' size=' + f.size + ' type=' + f.type);
-    // iOS에서 확장자가 없거나 다를 수 있어서 내용 기반으로도 시도
-    const isIpynb = f.name.endsWith('.ipynb') || f.name.endsWith('.json') || f.type === 'application/json' || f.type === '';
-    if (!isIpynb) { dbg('SKIP: not ipynb-like: ' + f.name); toast('⚠ .ipynb 파일을 선택해주세요 (현재: ' + f.name + ')'); return; }
+    dbg('file: name=[' + f.name + '] size=' + f.size + ' type=[' + f.type + ']');
+    // 확장자/타입 체크 완전 제거 — JSON 파싱 성공 여부로만 판단
+    // iOS iCloud는 파일명/타입이 다르게 넘어올 수 있음
     const r = new FileReader();
     r.onload = ev => {
       try {
-        dbg('FileReader loaded, length=' + ev.target.result.length);
-        const nb = JSON.parse(ev.target.result);
-        if (!nb.cells) { dbg('ERROR: no cells found'); toast('⚠ 유효한 .ipynb 파일이 아닙니다'); return; }
-        dbg('cells count=' + nb.cells.length);
+        const text = ev.target.result;
+        dbg('read ok, length=' + text.length + ' first20=[' + text.slice(0,20) + ']');
+        const nb = JSON.parse(text);
+        if (!nb.cells) {
+          dbg('no cells key, keys=' + Object.keys(nb).join(','));
+          toast('⚠ .ipynb 형식이 아닙니다: ' + f.name);
+          return;
+        }
+        dbg('cells=' + nb.cells.length);
         const strippedCells = nb.cells.map((c, i) => ({
           idx: i,
           type: c.cell_type,
@@ -743,14 +747,20 @@ function loadFiles(list) {
             ? stripComments(Array.isArray(c.source) ? c.source.join('') : (c.source || ''))
             : (Array.isArray(c.source) ? c.source.join('') : (c.source || ''))
         }));
-        files[f.name] = { nb, strippedCells };
-        if (!activeFile) activeFile = f.name;
-        renderFList(); ready(); toast('✓ ' + f.name + ' 로드됨 (' + nb.cells.length + '개 셀)');
-        if (activeFile === f.name) showFileQuiz(f.name);
-      } catch(e) { dbg('PARSE ERROR: ' + e.message); toast('⚠ 파싱 실패: ' + f.name + ' — ' + e.message); }
+        // 표시용 이름: 빈 문자열이면 'notebook.ipynb' 로 대체
+        const displayName = f.name || ('notebook_' + Date.now() + '.ipynb');
+        files[displayName] = { nb, strippedCells };
+        if (!activeFile) activeFile = displayName;
+        renderFList(); ready();
+        toast('✓ ' + displayName + ' 로드됨 (' + nb.cells.length + '개 셀)');
+        if (activeFile === displayName) showFileQuiz(displayName);
+      } catch(e) {
+        dbg('PARSE ERROR: ' + e.message);
+        toast('⚠ 파싱 실패: ' + f.name + ' (' + e.message + ')');
+      }
     };
-    r.onerror = (e) => { dbg('FileReader ERROR: ' + r.error); toast('⚠ 파일 읽기 실패: ' + f.name); };
-    r.readAsText(f);
+    r.onerror = () => { dbg('FileReader onerror: ' + r.error); toast('⚠ 파일 읽기 실패: ' + f.name); };
+    r.readAsText(f, 'utf-8');
   });
 }
 
