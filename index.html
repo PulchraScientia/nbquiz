@@ -1,0 +1,1671 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>nb.quiz</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Pretendard:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/marked@9.1.6/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+<style>
+/* ── JupyterLab Light palette ── */
+:root {
+  /* App chrome — light gray like JupyterLab */
+  --bg:       #f5f5f5;
+  --bg2:      #ffffff;
+  --bg3:      #efefef;
+  --bg4:      #e4e4e4;
+  --border:   rgba(0,0,0,0.10);
+  --border2:  rgba(0,0,0,0.18);
+  --text:     #1a1a1a;
+  --text2:    #4a4a4a;
+  --text3:    #888888;
+  /* accent — Jupyter blue */
+  --accent:   #1565c0;
+  --accent2:  #1976d2;
+  --abg:      rgba(21,101,192,0.08);
+  /* states */
+  --green:    #2e7d32;  --gbg: rgba(46,125,50,0.09);
+  --red:      #c62828;  --rbg: rgba(198,40,40,0.09);
+  --yellow:   #f57f17;  --ybg: rgba(245,127,23,0.10);
+  --orange:   #e65100;  --obg: rgba(230,81,0,0.09);
+  --mono: 'JetBrains Mono', monospace;
+  --sans: 'Pretendard', -apple-system, sans-serif;
+  --r: 4px; --rs: 3px;
+  /* JupyterLab cell border accent */
+  --cell-run-border: #42a5f5;
+}
+
+*,*::before,*::after { box-sizing:border-box; margin:0; padding:0 }
+body { font-family:var(--sans); background:var(--bg); color:var(--text); min-height:100vh; line-height:1.5; -webkit-font-smoothing:antialiased }
+
+/* ── layout ── */
+.shell { display:grid; grid-template-columns:260px 1fr; grid-template-rows:48px 1fr; min-height:100vh }
+@media(max-width:768px) { .shell { grid-template-columns:1fr } }
+
+/* ── topbar — Jupyter menubar style ── */
+.topbar {
+  grid-column:1/-1; display:flex; align-items:center; padding:0 16px;
+  background:#ffffff; border-bottom:1px solid var(--border2);
+  gap:8px; position:sticky; top:0; z-index:100;
+  box-shadow:0 1px 3px rgba(0,0,0,0.08);
+}
+.logo { font-family:var(--mono); font-size:14px; font-weight:700; color:#e37e29; letter-spacing:-0.03em }
+.logo span { color:#aaa; font-weight:400 }
+.spacer { flex:1 }
+.tabs { display:flex; gap:2px }
+.tab {
+  font-family:var(--sans); font-size:12px; padding:5px 12px;
+  border-radius:var(--rs); border:1px solid transparent;
+  background:none; color:var(--text3); cursor:pointer; transition:all .15s;
+}
+.tab:hover { color:var(--text2); background:var(--bg3) }
+.tab.on { background:var(--abg); border-color:rgba(21,101,192,0.3); color:var(--accent) }
+.bk-cnt { display:inline-flex; align-items:center; justify-content:center; background:var(--obg); color:var(--orange); border-radius:10px; font-size:10px; font-weight:600; padding:0 5px; margin-left:4px; min-width:16px }
+.score { display:flex; gap:14px; font-size:12px; color:var(--text3) }
+.score strong { color:var(--text); font-weight:600 }
+.score .sc strong { color:var(--green) }
+
+/* ── sidebar ── */
+.sidebar { background:#fafafa; border-right:1px solid var(--border2); display:flex; flex-direction:column; overflow:hidden }
+.sb-sec { padding:12px 13px; border-bottom:1px solid var(--border) }
+.sb-lbl { font-size:10px; font-weight:600; letter-spacing:.09em; text-transform:uppercase; color:var(--text3); margin-bottom:6px }
+.sb-sec input[type="password"] {
+  width:100%; background:#fff; border:1px solid var(--border2);
+  border-radius:var(--rs); color:var(--text); font-family:var(--mono);
+  font-size:11px; padding:6px 8px; outline:none; transition:border .15s;
+}
+.sb-sec input:focus { border-color:var(--accent) }
+.sb-sec input::placeholder { color:var(--text3) }
+.selrow { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:6px }
+.selrow select {
+  width:100%; background:#fff; border:1px solid var(--border2);
+  border-radius:var(--rs); color:var(--text); font-family:var(--sans);
+  font-size:12px; padding:5px 7px; outline:none; cursor:pointer;
+  appearance:none; -webkit-appearance:none;
+}
+.selrow select:focus { border-color:var(--accent) }
+.toggle-row { margin-top:7px }
+.toggle-btn {
+  width:100%; background:#fff; border:1px solid var(--border2);
+  border-radius:var(--rs); color:var(--text2); font-family:var(--sans);
+  font-size:12px; padding:5px 9px; cursor:pointer; transition:all .15s;
+  text-align:left; display:flex; align-items:center; gap:6px;
+}
+.toggle-btn:hover { border-color:var(--accent); color:var(--text) }
+.toggle-btn.on { background:var(--abg); border-color:rgba(21,101,192,0.35); color:var(--accent) }
+.toggle-dot { width:7px; height:7px; border-radius:50%; background:var(--text3); transition:background .15s; flex-shrink:0 }
+.toggle-btn.on .toggle-dot { background:var(--accent) }
+
+.file-list-wrap { flex:1; overflow-y:auto; padding:10px }
+.file-list-wrap::-webkit-scrollbar { width:4px }
+.file-list-wrap::-webkit-scrollbar-thumb { background:var(--bg4); border-radius:2px }
+.upload-zone {
+  border:1.5px dashed var(--border2); border-radius:var(--rs);
+  padding:12px; text-align:center; cursor:pointer; transition:all .15s;
+  position:relative; margin-bottom:7px; background:#fff;
+}
+.upload-zone:hover { border-color:var(--accent); background:var(--abg) }
+.upload-zone input { position:absolute; inset:0; opacity:0; cursor:pointer }
+.uz-text { font-size:12px; color:var(--text2) }
+.uz-sub { font-size:11px; color:var(--text3); margin-top:2px }
+.fi {
+  display:flex; align-items:center; gap:6px; padding:7px 8px;
+  border-radius:var(--rs); cursor:pointer; border:1px solid transparent;
+  margin-bottom:2px; transition:all .1s;
+}
+.fi:hover { background:var(--bg3); border-color:var(--border) }
+.fi.on { background:var(--abg); border-color:rgba(21,101,192,0.3) }
+.fi-info { flex:1; overflow:hidden }
+.fi-name { font-size:12px; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.fi.on .fi-name { color:var(--accent) }
+.fi-status { font-size:10px; color:var(--text3); margin-top:1px }
+.fi-status.done { color:var(--green) }
+.fi-status.generating { color:var(--accent); animation:pulse 1.2s ease-in-out infinite }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+.fi-del { font-size:11px; color:var(--text3); cursor:pointer; padding:2px 4px; border-radius:2px; flex-shrink:0; opacity:0; transition:opacity .1s; background:none; border:none; line-height:1 }
+.fi:hover .fi-del { opacity:1 }
+.fi-del:hover { color:var(--red); background:var(--rbg) }
+.sb-footer { padding:10px 13px; border-top:1px solid var(--border); display:flex; flex-direction:column; gap:5px }
+.btn-gen {
+  width:100%; background:var(--accent); color:#fff; border:none;
+  border-radius:var(--rs); font-family:var(--sans); font-size:13px;
+  font-weight:600; padding:8px; cursor:pointer; transition:all .15s;
+}
+.btn-gen:hover:not(:disabled) { background:var(--accent2); transform:translateY(-1px) }
+.btn-gen:disabled { opacity:.4; cursor:not-allowed; transform:none }
+.btn-reset-all {
+  width:100%; background:none; border:1px solid var(--border2);
+  border-radius:var(--rs); color:var(--text3); font-family:var(--sans);
+  font-size:11px; padding:5px; cursor:pointer; transition:all .15s;
+}
+.btn-reset-all:hover { border-color:var(--red); color:var(--red); background:var(--rbg) }
+.model-tag { font-size:10px; color:var(--text3); text-align:center; font-family:var(--mono) }
+
+/* ── main ── */
+.main { overflow-y:auto; padding:20px 24px; display:flex; flex-direction:column; background:var(--bg) }
+@media(max-width:600px) { .main { padding:12px } }
+.empty { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; gap:9px; padding:60px 20px }
+.empty-ic { font-size:36px; opacity:.25 }
+.empty-t { font-size:16px; font-weight:500; color:var(--text2) }
+.empty-s { font-size:13px; color:var(--text3); max-width:280px; line-height:1.7 }
+.loading { display:none; flex-direction:column; align-items:center; justify-content:center; gap:14px; padding:80px 20px }
+.loading.on { display:flex }
+.spin { width:26px; height:26px; border:2px solid var(--border2); border-top-color:var(--accent); border-radius:50%; animation:spin .7s linear infinite }
+@keyframes spin { to { transform:rotate(360deg) } }
+.load-txt { font-size:13px; color:var(--text2) }
+.load-bar { width:160px; height:3px; background:var(--bg4); border-radius:2px; overflow:hidden }
+.load-fill { height:100%; background:var(--accent); border-radius:2px; width:0%; transition:width .4s }
+
+/* ── panels ── */
+.panel { display:none; flex-direction:column }
+.panel.on { display:flex }
+.pnl-hdr {
+  display:flex; align-items:center; justify-content:space-between;
+  margin-bottom:12px; flex-wrap:wrap; gap:7px;
+  position:sticky; top:0; background:var(--bg); padding:8px 0; z-index:50;
+  border-bottom:1px solid var(--border);
+}
+.pnl-title { font-family:var(--mono); font-size:12px; color:var(--text2) }
+.pnl-title span { color:var(--accent) }
+.actions { display:flex; gap:4px; flex-wrap:wrap }
+.btn {
+  background:#fff; border:1px solid var(--border2); border-radius:var(--rs);
+  color:var(--text2); font-family:var(--sans); font-size:12px;
+  padding:4px 10px; cursor:pointer; transition:all .15s; white-space:nowrap;
+}
+.btn:hover { background:var(--bg3); color:var(--text); border-color:var(--border2) }
+.btn.primary { background:var(--abg); border-color:rgba(21,101,192,0.35); color:var(--accent) }
+.btn.primary:hover { background:rgba(21,101,192,0.14) }
+.btn.danger { background:var(--rbg); border-color:rgba(198,40,40,0.25); color:var(--red) }
+
+/* ── Jupyter-style cells ── */
+.cell {
+  display:flex; margin-bottom:4px;
+  border-radius:var(--r); overflow:hidden;
+}
+.cell-gutter {
+  width:64px; min-width:64px; background:#f5f5f5;
+  border:1px solid var(--border); border-right:none;
+  display:flex; flex-direction:column; align-items:flex-end;
+  padding:10px 6px 10px 0; gap:4px;
+  border-radius:var(--r) 0 0 var(--r);
+}
+.cell-exec-num {
+  font-family:var(--mono); font-size:11px; color:var(--text3);
+  white-space:nowrap;
+}
+.bk-btn { background:none; border:none; cursor:pointer; font-size:12px; color:var(--text3); padding:1px 3px; border-radius:2px; transition:all .15s; line-height:1 }
+.bk-btn:hover { color:var(--orange); background:var(--obg) }
+.bk-btn.on { color:var(--orange) }
+.cell-inner {
+  flex:1; border:1px solid var(--border); border-left:none; min-width:0;
+  border-radius:0 var(--r) var(--r) 0; overflow:hidden; background:#fff;
+}
+.cell.has-blank > .cell-inner { border-color:var(--cell-run-border); border-left:3px solid var(--cell-run-border) }
+.cell.has-blank > .cell-gutter { border-color:var(--cell-run-border); border-left-color:var(--border) }
+
+/* code body — JupyterLab Light */
+.cell-body {
+  padding:10px 12px; font-family:var(--mono); font-size:13.5px;
+  line-height:1.75; color:#000; white-space:pre-wrap; word-break:break-all;
+  background:#fff; tab-size:4;
+}
+/* markdown body */
+.cell-body.md {
+  font-family:var(--sans); font-size:14px; color:var(--text);
+  background:#fff; padding:14px 18px; line-height:1.75;
+  white-space:normal; word-break:normal;
+}
+.cell-body.md h1,.cell-body.md h2,.cell-body.md h3 { color:#111; font-weight:600; margin:10px 0 5px }
+.cell-body.md h1 { font-size:20px } .cell-body.md h2 { font-size:17px } .cell-body.md h3 { font-size:15px }
+.cell-body.md p { margin:5px 0 }
+.cell-body.md code { font-family:var(--mono); font-size:12px; background:#f0f0f0; padding:1px 5px; border-radius:2px; color:#c62828 }
+.cell-body.md pre { background:#f7f7f7; padding:10px 12px; border-radius:var(--rs); overflow-x:auto; margin:8px 0; border:1px solid var(--border) }
+.cell-body.md pre code { background:none; padding:0; color:#000 }
+.cell-body.md table { border-collapse:collapse; width:100%; margin:8px 0; font-size:13px }
+.cell-body.md th,.cell-body.md td { border:1px solid var(--border2); padding:5px 10px; text-align:left }
+.cell-body.md th { background:#f0f0f0; font-weight:600 }
+.cell-body.md ul,.cell-body.md ol { padding-left:20px; margin:5px 0 }
+.cell-body.md li { margin:2px 0 }
+.cell-body.md blockquote { border-left:3px solid var(--accent); padding-left:12px; margin:6px 0; color:var(--text2) }
+.cell-body.md strong { font-weight:700 }
+.cell-body.md .katex { font-size:1em }
+.cell-body.md .katex-display { margin:10px 0; overflow-x:auto }
+
+/* ── JupyterLab Light syntax colors ── */
+.py-kw  { color:#008000; font-weight:700 }  /* def, class, import, return, if, for, ... */
+.py-bi  { color:#008000 }                   /* built-ins: print, len, range, ... */
+.py-str { color:#ba2121 }                   /* strings */
+.py-num { color:#666666 }                   /* numbers */
+.py-cmt { color:#408080; font-style:italic } /* comments — kept only if shown */
+.py-fn  { color:#0000ff }                   /* function calls / names */
+.py-cls { color:#0000ff; font-weight:700 }  /* class names */
+.py-dec { color:#aa22ff; font-weight:700 }  /* decorators @ */
+.py-op  { color:#666666 }                   /* operators: = + - * / ** ... */
+.py-self{ color:#19177c }                   /* self, cls */
+.py-deco{ color:#aa22ff }
+
+/* ── blank line input ── */
+.blank-line { display:block; margin:1px 0 }
+.bl-field {
+  display:inline-flex; align-items:center; gap:5px;
+  background:#fff9e6; border:1px solid #f0c040;
+  border-radius:2px; padding:1px 6px; transition:all .15s; min-height:24px;
+  width:100%;
+}
+.bl-field:focus-within { border-color:var(--accent); background:#e8f0fe; box-shadow:0 0 0 2px rgba(21,101,192,0.12) }
+.bl-field.ok  { background:#e8f5e9; border-color:#4caf50 }
+.bl-field.no  { background:#ffebee; border-color:#ef5350 }
+.bl-field.show{ background:#fff8e1; border-color:#ffc107 }
+.bl-tag { font-size:10px; padding:1px 5px; border-radius:2px; font-weight:700; flex-shrink:0; font-family:var(--sans) }
+.t-idx  { background:#e3f2fd; color:#1565c0 }
+.t-ok   { background:#e8f5e9; color:#2e7d32 }
+.t-no   { background:#ffebee; color:#c62828 }
+.t-show { background:#fff8e1; color:#f57f17 }
+.bl-input {
+  font-family:var(--mono); font-size:13.5px; background:transparent;
+  border:none; outline:none; color:#000; flex:1; padding:1px 0; min-width:60px; width:100%;
+}
+.bl-input::placeholder { color:#bbb; font-size:11px }
+.bl-input:disabled { cursor:default; color:#444 }
+.bl-field.ok  .bl-input { color:#2e7d32 }
+.bl-field.no  .bl-input { color:#c62828 }
+.bl-field.show .bl-input { color:#6d4c00 }
+.err-tip { font-family:var(--sans); font-size:10px; color:var(--red); background:var(--rbg); border-radius:2px; padding:1px 6px; white-space:nowrap; flex-shrink:0; max-width:200px; overflow:hidden; text-overflow:ellipsis }
+/* ── inline token blank (easy mode) ── */
+.tok-blank { display:inline-flex; align-items:center; gap:3px; background:#fff9e6; border:1px solid #f0c040; border-radius:2px; padding:0 4px; vertical-align:baseline; cursor:text }
+.tok-blank:focus-within { border-color:var(--accent); background:#e8f0fe }
+.tok-blank.ok  { background:#e8f5e9; border-color:#4caf50 }
+.tok-blank.no  { background:#ffebee; border-color:#ef5350 }
+.tok-blank.show{ background:#fff8e1; border-color:#ffc107 }
+.tok-inp { font-family:var(--mono); font-size:13.5px; background:transparent; border:none; outline:none; color:#000; padding:0; width:6ch; min-width:4ch; max-width:30ch }
+.tok-inp:disabled { cursor:default; color:#444 }
+.tok-blank.ok  .tok-inp { color:#2e7d32 }
+.tok-blank.no  .tok-inp { color:#c62828 }
+.tok-blank.show .tok-inp { color:#6d4c00 }
+.tok-tag { font-size:9px; padding:1px 4px; border-radius:2px; font-weight:700; font-family:var(--sans); flex-shrink:0 }
+.easy-hint { display:block; font-family:var(--sans); font-size:11px; color:#555; background:#f0f7ff; border-left:2px solid var(--accent); padding:3px 8px; margin-top:2px; line-height:1.5 }
+
+.reason-strip { padding:5px 12px; background:#f3f8ff; border-left:3px solid var(--accent); font-size:11px; color:#444; line-height:1.6; margin-bottom:0 }
+.reason-strip strong { color:var(--accent); font-weight:600 }
+
+/* ── review ── */
+.rev-empty { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; gap:7px; padding:60px 20px }
+.rev-empty-ic { font-size:28px; opacity:.25 }
+.rev-empty-t  { font-size:14px; color:var(--text2) }
+.rev-empty-s  { font-size:12px; color:var(--text3) }
+.bk-card { background:#fff; border:1px solid var(--border2); border-radius:var(--r); margin-bottom:8px; overflow:hidden }
+.bk-card-hdr { display:flex; align-items:center; gap:7px; padding:6px 12px; background:#fff8f0; border-bottom:1px solid rgba(230,81,0,0.15) }
+.bk-card-title { font-size:12px; color:var(--orange); font-family:var(--mono); flex:1 }
+.bk-card-meta  { font-size:11px; color:var(--text3) }
+.bk-del { background:none; border:none; cursor:pointer; font-size:12px; color:var(--text3); padding:2px 5px; border-radius:2px; transition:all .15s }
+.bk-del:hover { color:var(--red); background:var(--rbg) }
+.bk-card pre { padding:10px 13px; font-family:var(--mono); font-size:12.5px; line-height:1.8; color:#000; white-space:pre-wrap; word-break:break-all; background:#fff }
+.missing-line { background:#fff9c4; border-left:3px solid #f9a825; padding-left:7px; display:block }
+.bk-note-wrap { padding:6px 11px; border-top:1px solid var(--border); background:#fafafa }
+.bk-note { width:100%; background:transparent; border:none; outline:none; color:var(--text2); font-family:var(--sans); font-size:12px; resize:none; line-height:1.5; min-height:32px }
+.bk-note::placeholder { color:var(--text3) }
+/* SR buttons */
+.sr-btn { background:none; border:none; cursor:pointer; font-size:13px; padding:2px 3px; border-radius:2px; transition:opacity .15s; line-height:1 }
+.sr-btn:hover { opacity:.7; background:var(--bg3) }
+.toast { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); background:#333; color:#fff; border-radius:20px; padding:7px 16px; font-size:12px; opacity:0; transition:opacity .25s; pointer-events:none; white-space:nowrap; z-index:200 }
+.toast.on { opacity:1 }
+</style>
+</head>
+<body>
+<div class="shell">
+
+<header class="topbar">
+  <div class="logo">nb<span>.</span>quiz</div>
+  <div class="spacer"></div>
+  <div class="tabs">
+    <button class="tab on" id="tab-q" onclick="switchTab('q')">퀴즈</button>
+    <button class="tab" id="tab-r" onclick="switchTab('r')">
+      오답 복습 <span class="bk-cnt" id="bk-cnt" style="display:none">0</span>
+    </button>
+  </div>
+  <div style="width:10px"></div>
+  <div class="score" id="score" style="display:none">
+    <div class="sc">정답 <strong id="sc-c">0</strong></div>
+    <div>시도 <strong id="sc-t">0</strong></div>
+    <div>남음 <strong id="sc-r">0</strong></div>
+  </div>
+</header>
+
+<aside class="sidebar">
+  <div class="sb-sec">
+    <div class="sb-lbl">API Key</div>
+    <input type="password" id="api-key" placeholder="sk-ant-api03-..." autocomplete="off"/>
+  </div>
+  <div class="sb-sec">
+    <div class="sb-lbl">출제 설정</div>
+    <select id="diff" style="width:100%;background:#fff;border:1px solid var(--border2);border-radius:var(--rs);color:var(--text);font-family:var(--sans);font-size:12px;padding:5px 7px;outline:none;cursor:pointer;appearance:none;-webkit-appearance:none;margin-bottom:6px">
+      <option value="easy">쉬움 — 부분 빈칸 (토큰)</option>
+      <option value="medium" selected>보통 — 줄 전체 비우기</option>
+      <option value="hard">어려움 — 설명 없는 줄 비우기</option>
+    </select>
+    <!-- 쉬움 전용 설정 -->
+    <div id="easy-opts">
+      <div class="sb-lbl" style="margin-top:4px">커버리지 (전체 줄 대비)</div>
+      <div class="selrow">
+        <select id="easy-pct">
+          <option value="30">30%</option>
+          <option value="50" selected>50%</option>
+          <option value="80">80%</option>
+        </select>
+        <select id="easy-tokens">
+          <option value="1">구멍 1개/줄</option>
+          <option value="2" selected>구멍 2개/줄</option>
+        </select>
+      </div>
+    </div>
+    <!-- 보통/어려움 설정 -->
+    <div id="med-hard-opts">
+      <div class="selrow">
+        <select id="n-per-block">
+          <option value="1">블락당 1줄</option>
+          <option value="2" selected>블락당 2줄</option>
+          <option value="3">블락당 3줄</option>
+          <option value="4">블락당 4줄</option>
+          <option value="5">블락당 5줄</option>
+        </select>
+        <button class="toggle-btn" id="consec-btn" style="margin:0">
+          <span class="toggle-dot"></span>
+          <span id="consec-label">분산</span>
+        </button>
+      </div>
+    </div>
+  </div>
+  <div class="file-list-wrap">
+    <div class="sb-lbl" style="padding:2px 2px 6px">노트북 파일</div>
+    <div class="upload-zone" id="dzone">
+      <input type="file" id="file-in" accept=".ipynb" multiple/>
+      <div class="uz-text">📂 파일 추가</div>
+      <div class="uz-sub">.ipynb · 여러 파일 가능</div>
+    </div>
+    <div id="flist"></div>
+  </div>
+  <div class="sb-footer">
+    <button class="btn-gen" id="gen-btn" disabled>이 파일 퀴즈 생성</button>
+    <button class="btn-reset-all" id="reset-all-btn">⚠ 모든 파일 퀴즈 초기화</button>
+    <div class="model-tag">claude-sonnet-4-6</div>
+  </div>
+</aside>
+
+<main class="main">
+  <div class="empty" id="empty">
+    <div class="empty-ic">📓</div>
+    <div class="empty-t">노트북을 불러오세요</div>
+    <div class="empty-s">.ipynb 파일을 추가하고<br>API 키 입력 후 퀴즈를 생성하세요</div>
+  </div>
+  <div class="loading" id="loading">
+    <div class="spin"></div>
+    <div class="load-txt" id="load-txt">분석 중...</div>
+    <div class="load-bar"><div class="load-fill" id="load-fill"></div></div>
+  </div>
+  <div class="panel" id="qpanel">
+    <div class="pnl-hdr">
+      <div class="pnl-title">파일: <span id="qfile">—</span></div>
+      <div class="actions">
+        <button class="btn primary" id="check-btn">✓ 채점</button>
+        <button class="btn" id="reveal-btn">💡 정답</button>
+        <button class="btn" id="regen-btn">🔄 다시 뽑기</button>
+        <button class="btn" id="reset-btn">↩ 초기화</button>
+      </div>
+    </div>
+    <div id="cells"></div>
+  </div>
+  <div class="panel" id="rpanel">
+    <div class="pnl-hdr">
+      <div class="pnl-title">오답 복습 노트</div>
+      <div class="actions"><button class="btn danger" id="clear-btn">🗑 전체 삭제</button></div>
+    </div>
+    <div id="rev-body"></div>
+  </div>
+</main>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/pyodide/v0.25.1/full/pyodide.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+
+// ── state ──
+const files = {};             // name → { nb, strippedCells }
+const linePool = {};          // name → { pool: [{cell_idx, line}], generated: false }
+const lineHistory = {};       // name → Set of recently used "cell_idx::line" keys
+const quizCache = {};         // name → { blanks }
+const generatingFiles = new Set();
+let activeFile = null;
+let consecutiveMode = false;
+let bookmarks = JSON.parse(localStorage.getItem('nbq_bk') || '[]');
+// Spaced Repetition data: { id → { easeFactor, interval, nextReview, reps } }
+let srData = JSON.parse(localStorage.getItem('nbq_sr') || '{}');
+let toastTimer;
+let chPx = 8.4;
+let currentDiff = 'medium';
+
+// ── diff UI toggle ──
+function onDiffChange() {
+  currentDiff = $('diff').value;
+  $('easy-opts').style.display    = currentDiff === 'easy'   ? 'block' : 'none';
+  $('med-hard-opts').style.display = currentDiff !== 'easy'  ? 'block' : 'none';
+}
+
+// ── SM-2 Spaced Repetition ──
+// grade: 0=완전실패 1=어렵게정답 2=쉽게정답
+function sm2Update(id, grade) {
+  const d = srData[id] || { easeFactor: 2.5, interval: 1, reps: 0, nextReview: null };
+  if (grade === 0) {
+    d.reps = 0; d.interval = 1;
+  } else {
+    if (d.reps === 0) d.interval = 1;
+    else if (d.reps === 1) d.interval = 6;
+    else d.interval = Math.round(d.interval * d.easeFactor);
+    d.reps++;
+    d.easeFactor = Math.max(1.3, d.easeFactor + 0.1 - (2 - grade) * (0.08 + (2 - grade) * 0.02));
+  }
+  const next = new Date(); next.setDate(next.getDate() + d.interval);
+  d.nextReview = next.toISOString().slice(0, 10);
+  srData[id] = d;
+  localStorage.setItem('nbq_sr', JSON.stringify(srData));
+  return d;
+}
+function srDueCount() {
+  const today = new Date().toISOString().slice(0, 10);
+  return bookmarks.filter(bk => {
+    const d = srData[bk.id];
+    return !d || !d.nextReview || d.nextReview <= today;
+  }).length;
+}
+
+// ── comment stripper ──
+// Removes # single-line comments from Python source, preserves docstrings, blank lines
+function stripComments(src) {
+  const lines = src.split('\n');
+  const result = [];
+  let inDocstring = false;
+  let docChar = '';
+
+  for (let raw of lines) {
+    const stripped = raw.trimStart();
+
+    // track docstrings (triple-quoted strings)
+    const tripleDouble = (raw.match(/"""/g) || []).length;
+    const tripleSingle = (raw.match(/'''/g) || []).length;
+    if (!inDocstring) {
+      if (tripleDouble % 2 !== 0) { inDocstring = true; docChar = '"""'; }
+      else if (tripleSingle % 2 !== 0) { inDocstring = true; docChar = "'''"; }
+    } else {
+      const closeCount = (raw.match(new RegExp(docChar.replace(/'/g, "\\'"), 'g')) || []).length;
+      if (closeCount % 2 !== 0) inDocstring = false;
+    }
+
+    if (inDocstring) { result.push(raw); continue; }
+
+    // skip pure comment lines (indent + #)
+    if (/^\s*#/.test(raw)) continue;
+
+    // strip inline comment — careful about # inside strings
+    let cleaned = raw;
+    let inStr = false, strChar = '';
+    let commentIdx = -1;
+    for (let i = 0; i < raw.length; i++) {
+      const c = raw[i];
+      if (!inStr && (c === '"' || c === "'")) {
+        // check for triple quote
+        if (raw.slice(i, i+3) === '"""' || raw.slice(i, i+3) === "'''") { i += 2; }
+        else { inStr = true; strChar = c; }
+      } else if (inStr && c === strChar && raw[i-1] !== '\\') {
+        inStr = false;
+      } else if (!inStr && c === '#') {
+        commentIdx = i; break;
+      }
+    }
+    if (commentIdx > 0) cleaned = raw.slice(0, commentIdx).trimEnd();
+    result.push(cleaned);
+  }
+
+  // collapse 3+ consecutive blank lines to 1
+  const final = [];
+  let blanks = 0;
+  for (const l of result) {
+    if (l.trim() === '') { blanks++; if (blanks <= 1) final.push(l); }
+    else { blanks = 0; final.push(l); }
+  }
+  return final.join('\n');
+}
+
+// ── Python syntax tokenizer (JupyterLab Light) ──
+const PY_KW = new Set(['False','None','True','and','as','assert','async','await','break','class','continue','def','del','elif','else','except','finally','for','from','global','if','import','in','is','lambda','nonlocal','not','or','pass','raise','return','try','while','with','yield']);
+const PY_BI = new Set(['abs','all','any','bin','bool','breakpoint','bytearray','bytes','callable','chr','classmethod','compile','complex','delattr','dict','dir','divmod','enumerate','eval','exec','filter','float','format','frozenset','getattr','globals','hasattr','hash','help','hex','id','input','int','isinstance','issubclass','iter','len','list','locals','map','max','memoryview','min','next','object','oct','open','ord','pow','print','property','range','repr','reversed','round','set','setattr','slice','sorted','staticmethod','str','sum','super','tuple','type','vars','zip']);
+
+function escH(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function highlightPython(src) {
+  // tokenize line by line
+  const lines = src.split('\n');
+  return lines.map(line => highlightLine(line)).join('\n');
+}
+
+function highlightLine(line) {
+  // Handle full-line comment
+  if (/^\s*#/.test(line)) {
+    const ind = line.match(/^(\s*)/)[1];
+    return escH(ind) + `<span class="py-cmt">${escH(line.trimStart())}</span>`;
+  }
+
+  let out = '';
+  let i = 0;
+  const len = line.length;
+
+  while (i < len) {
+    const ch = line[i];
+    const rest = line.slice(i);
+
+    // triple-quoted string
+    if (rest.startsWith('"""') || rest.startsWith("'''")) {
+      const q = rest.slice(0, 3);
+      const end = rest.indexOf(q, 3);
+      if (end !== -1) {
+        out += `<span class="py-str">${escH(rest.slice(0, end + 3))}</span>`;
+        i += end + 3; continue;
+      }
+    }
+
+    // single-line string
+    if (ch === '"' || ch === "'") {
+      let j = i + 1;
+      while (j < len && line[j] !== ch) { if (line[j] === '\\') j++; j++; }
+      out += `<span class="py-str">${escH(line.slice(i, j + 1))}</span>`;
+      i = j + 1; continue;
+    }
+
+    // inline comment
+    if (ch === '#') {
+      out += `<span class="py-cmt">${escH(line.slice(i))}</span>`;
+      break;
+    }
+
+    // decorator
+    if (ch === '@') {
+      const m = rest.match(/^@[\w.]+/);
+      if (m) { out += `<span class="py-dec">${escH(m[0])}</span>`; i += m[0].length; continue; }
+    }
+
+    // number
+    if (/[0-9]/.test(ch) || (ch === '.' && /[0-9]/.test(line[i+1] || ''))) {
+      const m = rest.match(/^[0-9]*\.?[0-9]+([eE][+-]?[0-9]+)?[jJ]?/);
+      if (m) { out += `<span class="py-num">${escH(m[0])}</span>`; i += m[0].length; continue; }
+    }
+
+    // word token
+    if (/[a-zA-Z_]/.test(ch)) {
+      const m = rest.match(/^[a-zA-Z_]\w*/)[0];
+      const after = line[i + m.length];
+      if (m === 'self' || m === 'cls') {
+        out += `<span class="py-self">${escH(m)}</span>`;
+      } else if (PY_KW.has(m)) {
+        out += `<span class="py-kw">${escH(m)}</span>`;
+      } else if (after === '(') {
+        const cls = PY_BI.has(m) ? 'py-bi' : 'py-fn';
+        out += `<span class="${cls}">${escH(m)}</span>`;
+      } else if (/^[A-Z]/.test(m) && after !== '=') {
+        out += `<span class="py-cls">${escH(m)}</span>`;
+      } else {
+        out += escH(m);
+      }
+      i += m.length; continue;
+    }
+
+    // operator/punctuation — colorize = + - * / ** etc
+    if ('+-*/%<>=!&|^~'.includes(ch)) {
+      const m = rest.match(/^[+\-*\/%<>=!&|^~]+/)[0];
+      out += `<span class="py-op">${escH(m)}</span>`;
+      i += m.length; continue;
+    }
+
+    out += escH(ch); i++;
+  }
+  return out;
+}
+
+// ── Pyodide ──
+let pyodide = null, pyReady = false, pyLoading = false;
+async function ensurePyodide() {
+  if (pyReady) return true;
+  if (pyLoading) { while (pyLoading) await new Promise(r => setTimeout(r, 100)); return pyReady; }
+  pyLoading = true;
+  toast('🐍 Python 엔진 초기화 중...');
+  try {
+    pyodide = await loadPyodide({ indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.25.1/full/' });
+    await pyodide.runPythonAsync(`
+import ast, json
+def ast_eq(a, b):
+    ta=tb=None
+    for m in ('eval','exec'):
+        try: ta=ast.parse(a.strip(),mode=m); break
+        except: pass
+    for m in ('eval','exec'):
+        try: tb=ast.parse(b.strip(),mode=m); break
+        except: pass
+    if ta is None: return json.dumps({"match":False,"state":"syntax_err","msg":"문법 오류"})
+    if tb is None: return json.dumps({"match":False,"state":"no","msg":None})
+    ok = ast.dump(ta)==ast.dump(tb)
+    return json.dumps({"match":ok,"state":"ok" if ok else "no","msg":None})
+def chk_syn(c):
+    for m in ('eval','exec'):
+        try: ast.parse(c.strip(),mode=m); return json.dumps({"ok":True,"msg":None})
+        except SyntaxError as e: pass
+    return json.dumps({"ok":False,"msg":str(e)})
+`);
+    pyReady = true; toast('✓ Python 엔진 준비됨');
+  } catch { toast('⚠ Python 엔진 로드 실패 — exact match 사용'); }
+  pyLoading = false; return pyReady;
+}
+window.addEventListener('load', () => {
+  setTimeout(ensurePyodide, 1500);
+  // measure char width
+  const r = document.createElement('span');
+  r.style.cssText = 'position:absolute;visibility:hidden;font-family:"JetBrains Mono",monospace;font-size:13.5px;white-space:pre';
+  r.textContent = '        ';
+  document.body.appendChild(r);
+  chPx = r.getBoundingClientRect().width / 8;
+  document.body.removeChild(r);
+});
+
+async function gradeAnswer(inputVal, answerContent, indentStr) {
+  const fi = indentStr + inputVal.trimEnd();
+  const fa = indentStr + answerContent.trimEnd();
+  if (pyReady) {
+    try {
+      const sr = JSON.parse(pyodide.runPython(`chk_syn(${JSON.stringify(fi)})`));
+      if (!sr.ok) return { match:false, state:'syntax_err', msg:'문법 오류: '+sr.msg };
+      return JSON.parse(pyodide.runPython(`ast_eq(${JSON.stringify(fi)},${JSON.stringify(fa)})`));
+    } catch {}
+  }
+  return { match: inputVal.trimEnd()===answerContent.trimEnd(), state: inputVal.trimEnd()===answerContent.trimEnd()?'ok':'no', msg:null };
+}
+
+// ── diff + consecutive UI 초기화 ──
+$('diff').addEventListener('change', onDiffChange);
+onDiffChange(); // 초기 상태 적용
+
+$('consec-btn').addEventListener('click', () => {
+  consecutiveMode = !consecutiveMode;
+  $('consec-btn').classList.toggle('on', consecutiveMode);
+  $('consec-label').textContent = consecutiveMode ? '연속' : '분산';
+});
+
+// ── API key ──
+const savedKey = localStorage.getItem('nbq_key');
+if (savedKey) $('api-key').value = savedKey;
+$('api-key').addEventListener('input', () => { localStorage.setItem('nbq_key', $('api-key').value.trim()); ready(); });
+
+// ── file handling ──
+$('file-in').addEventListener('change', e => loadFiles(e.target.files));
+const dzone = $('dzone');
+dzone.addEventListener('dragover', e => { e.preventDefault(); dzone.style.borderColor='var(--accent)'; });
+dzone.addEventListener('dragleave', () => { dzone.style.borderColor=''; });
+dzone.addEventListener('drop', e => { e.preventDefault(); dzone.style.borderColor=''; loadFiles(e.dataTransfer.files); });
+
+function loadFiles(list) {
+  Array.from(list).forEach(f => {
+    if (!f.name.endsWith('.ipynb')) { toast('⚠ .ipynb 파일만 지원합니다'); return; }
+    const r = new FileReader();
+    r.onload = ev => {
+      try {
+        const nb = JSON.parse(ev.target.result);
+        // pre-process: strip comments from all code cells
+        const strippedCells = nb.cells.map((c, i) => ({
+          idx: i,
+          type: c.cell_type,
+          src: c.cell_type === 'code'
+            ? stripComments(Array.isArray(c.source) ? c.source.join('') : (c.source || ''))
+            : (Array.isArray(c.source) ? c.source.join('') : (c.source || ''))
+        }));
+        files[f.name] = { nb, strippedCells };
+        if (!activeFile) activeFile = f.name;
+        renderFList(); ready(); toast('✓ ' + f.name + ' 로드됨');
+        if (activeFile === f.name) showFileQuiz(f.name);
+      } catch { toast('⚠ 파싱 실패: ' + f.name); }
+    };
+    r.readAsText(f);
+  });
+}
+
+function fileStatusInfo(name) {
+  if (generatingFiles.has(name)) return { cls: 'generating', icon: '⏳', label: '생성 중...' };
+  if (quizCache[name])            return { cls: 'done',       icon: '📗', label: '퀴즈 생성됨' };
+  return                                 { cls: '',           icon: '📘', label: '퀴즈 없음' };
+}
+
+function renderFList() {
+  const el = $('flist'); el.innerHTML = '';
+  Object.keys(files).forEach(name => {
+    const d = document.createElement('div');
+    d.className = 'fi' + (name === activeFile ? ' on' : '');
+    const { cls, icon, label } = fileStatusInfo(name);
+    d.innerHTML = `
+      <span style="font-size:12px">${icon}</span>
+      <div class="fi-info">
+        <div class="fi-name" title="${name}">${name}</div>
+        <div class="fi-status ${cls}">${label}</div>
+      </div>
+      <button class="fi-del" data-n="${name}">✕</button>`;
+    d.addEventListener('click', e => {
+      if (e.target.classList.contains('fi-del')) return;
+      activeFile = name; renderFList(); ready(); showFileQuiz(name);
+    });
+    d.querySelector('.fi-del').addEventListener('click', e => {
+      e.stopPropagation();
+      generatingFiles.delete(name);
+      delete files[name]; delete quizCache[name];
+      activeFile = Object.keys(files)[0] || null;
+      renderFList(); ready();
+      if (activeFile) showFileQuiz(activeFile);
+      else hideQuiz();
+    });
+    el.appendChild(d);
+  });
+}
+
+function ready() {
+  const isGeneratingActive = activeFile && generatingFiles.has(activeFile);
+  $('gen-btn').disabled = !(activeFile && files[activeFile] && $('api-key').value.trim().length > 20) || isGeneratingActive;
+  $('regen-btn').disabled = isGeneratingActive;
+}
+function hideQuiz() {
+  $('qpanel').classList.remove('on'); $('qpanel').style.display='none';
+  $('score').style.display='none'; $('empty').style.display='flex';
+}
+function showFileQuiz(name) {
+  if (!files[name]) return;
+  // 이 파일이 생성 중이면 로딩 스피너 표시
+  if (generatingFiles.has(name)) {
+    $('empty').style.display='none';
+    $('qpanel').classList.remove('on'); $('qpanel').style.display='none';
+    $('score').style.display='none';
+    $('loading').classList.add('on');
+    return;
+  }
+  if (quizCache[name]) {
+    $('loading').classList.remove('on');
+    renderQuiz(files[name].strippedCells, quizCache[name].blanks);
+    $('empty').style.display='none';
+    $('qpanel').classList.add('on'); $('qpanel').style.display='flex';
+    $('score').style.display='flex';
+    updateScore();
+  } else {
+    $('loading').classList.remove('on');
+    hideQuiz();
+  }
+}
+
+function toast(msg) {
+  const el = $('toast'); el.textContent = msg; el.classList.add('on');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('on'), 2800);
+}
+function switchTab(t) {
+  $('tab-q').classList.toggle('on', t==='q');
+  $('tab-r').classList.toggle('on', t==='r');
+  if (t==='q') {
+    $('rpanel').classList.remove('on');
+    if (activeFile && quizCache[activeFile]) {
+      $('empty').style.display='none';
+      $('qpanel').classList.add('on'); $('qpanel').style.display='flex';
+    } else { $('qpanel').style.display='none'; $('empty').style.display='flex'; }
+  } else {
+    $('qpanel').style.display='none'; $('empty').style.display='none';
+    $('loading').classList.remove('on');
+    $('rpanel').classList.add('on'); renderReview();
+  }
+}
+
+// ── prompt caching: 노트북 내용(캐싱) + 지시문(매번) 분리 ──
+// Part A: 노트북 내용 — cache_control 적용, 파일당 1회만 전송 후 5분 캐시 유지
+// Part B: 지시문 — 난이도/블락수/연속여부가 바뀌므로 매번 전송
+// ── Phase 1: pool 생성 프롬프트 (파일당 1회 Claude 호출) ──
+function buildPoolPrompt(strippedCells) {
+  const md = strippedCells.filter(c=>c.type==='markdown').map(c=>c.src).join('\n\n---\n\n');
+  const code = strippedCells.filter(c=>c.type==='code' && c.src.trim().length>10)
+    .map(c=>`[셀 #${c.idx}]\n${c.src}`).join('\n\n===\n\n');
+
+  const notebookContent = `딥러닝/머신러닝 실습 퀴즈 출제자입니다. (주석 제거된 코드입니다.)
+
+## 마크다운:
+${md}
+
+## 코드 셀:
+${code}`;
+
+  const instruction = `## 지시:
+각 코드 셀에서 빈칸 문제로 낼 수 있는 "출제 가능한 줄" 목록을 추출하세요.
+
+출제 가능 기준: 학습자가 직접 작성해야 할 핵심 로직 줄.
+출제 불가 (반드시 제외):
+- print/display/plt/logging 등 출력/시각화 줄
+- import 문
+- 빈 줄, pass, break, continue 단독 줄
+- 단순 trivial 할당 (x=1, name="abc")
+- CUDA 체크, pip install, Drive 마운트 셀 전체
+- 독스트링(""") 줄
+
+각 줄마다 난이도 태깅: "easy"(단순 파라미터/값) "medium"(핵심로직) "hard"(복잡구현).
+
+순수 JSON만 응답:
+{"pool":[{"cell_idx":<int>,"line":"<들여쓰기 포함 전체 줄>","diff":"easy"|"medium"|"hard"}]}`;
+
+  return { notebookContent, instruction };
+}
+
+// ── Python 토큰 추출 (easy 모드 부분 빈칸용) ──
+function extractBlankableTokens(line) {
+  const tokens = [];
+  if (!line.trim() || line.trim().startsWith('#')) return tokens;
+  const SKIP = new Set(['if','else','elif','for','while','try','except','finally',
+    'with','as','in','not','and','or','is','return','pass','break','continue',
+    'import','from','class','def','lambda','yield','del','raise','assert',
+    'True','False','None','self','cls']);
+  let i = 0;
+  while (i < line.length) {
+    const ch = line[i], rest = line.slice(i);
+    const isTriple = rest.startsWith('"""') || rest.startsWith("'''");
+    if (isTriple) {
+      const q = rest.slice(0,3);
+      const end = rest.indexOf(q, 3);
+      i += end !== -1 ? end + 3 : 3; continue;
+    }
+    if (ch === '"' || ch === "'") {
+      let j = i+1;
+      while (j < line.length && line[j] !== ch) { if (line[j] === '\\') j++; j++; }
+      i = j+1; continue;
+    }
+    if (ch === '#') break;
+    if (/[0-9]/.test(ch) || (ch === '.' && /[0-9]/.test(line[i+1]||''))) {
+      const m = rest.match(/^[0-9]*\.?[0-9]+([eE][+-]?[0-9]+)?[jJ]?/);
+      if (m) { tokens.push({start:i,end:i+m[0].length,text:m[0],type:'num',line}); i+=m[0].length; continue; }
+    }
+    if (/[a-zA-Z_]/.test(ch)) {
+      const m = rest.match(/^[a-zA-Z_]\w*/)[0];
+      const after = line[i+m.length];
+      if (!SKIP.has(m) && m.length > 1) {
+        const type = after === '(' ? 'func' : /^[A-Z]/.test(m) ? 'cls' : 'id';
+        if (type === 'func' || type === 'cls' || m.length >= 3)
+          tokens.push({start:i,end:i+m.length,text:m,type,line});
+      }
+      i += m.length; continue;
+    }
+    i++;
+  }
+  return tokens;
+}
+
+// ── 물리적 연속 줄 그룹화 (괄호/백슬래시 이음) ──
+function groupPhysicalLines(lines) {
+  const groups = []; let cur = [], depth = 0;
+  for (const line of lines) {
+    cur.push(line);
+    let inStr = false, strChar = '';
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (!inStr && (c === '"' || c === "'")) { inStr=true; strChar=c; }
+      else if (inStr && c === strChar && line[i-1] !== '\\') { inStr=false; }
+      else if (!inStr) {
+        if ('([{'.includes(c)) depth++;
+        else if (')]}'.includes(c)) depth = Math.max(0, depth-1);
+      }
+    }
+    if (depth <= 0 && !line.trimEnd().endsWith('\\')) { groups.push(cur); cur=[]; depth=0; }
+  }
+  if (cur.length) groups.push(cur);
+  return groups;
+}
+
+// ── easy 모드: 줄 내 토큰 부분 빈칸 생성 ──
+function buildEasyBlanks(strippedCells, pct, maxTok) {
+  const blanks = []; let globalNum = 1;
+  for (const cell of strippedCells) {
+    if (cell.type !== 'code') continue;
+    const allLines = cell.src.split('\n');
+    const groups = groupPhysicalLines(allLines);
+    const eligible = groups.filter(g => {
+      const full = g.join(' ');
+      if (/^\s*(#|import |from |pass\s*$|break\s*$|continue\s*$|\s*$)/.test(full)) return false;
+      if (/print\s*\(|display\s*\(|plt\.|logging\./.test(full)) return false;
+      return g.flatMap(l => extractBlankableTokens(l)).length > 0;
+    });
+    if (!eligible.length) continue;
+    const totalLines = allLines.filter(l => l.trim()).length;
+    const targetLines = Math.max(1, Math.round(totalLines * pct / 100));
+    const shuffled = [...eligible];
+    for (let i=shuffled.length-1;i>0;i--) {
+      const j=Math.floor(Math.random()*(i+1));
+      [shuffled[i],shuffled[j]]=[shuffled[j],shuffled[i]];
+    }
+    let linesUsed = 0;
+    for (const group of shuffled) {
+      if (linesUsed >= targetLines) break;
+      const allToks = group.flatMap(l => extractBlankableTokens(l));
+      if (!allToks.length) continue;
+      const shuffToks = [...allToks];
+      for (let i=shuffToks.length-1;i>0;i--) {
+        const j=Math.floor(Math.random()*(i+1));
+        [shuffToks[i],shuffToks[j]]=[shuffToks[j],shuffToks[i]];
+      }
+      blanks.push({
+        type:'token', cell_idx:cell.idx, group_lines:group,
+        tokens:shuffToks.slice(0,maxTok), reason:'', hint:null, num:globalNum++
+      });
+      linesUsed += group.length;
+    }
+  }
+  return blanks;
+}
+
+// ── easy 모드 annotate 프롬프트 ──
+function buildEasyAnnotatePrompt(easyBlanks) {
+  const items = easyBlanks.map((b,i) => {
+    const preview = b.group_lines.join(' ').slice(0,120);
+    const toks = b.tokens.map(t=>t.text).join(', ');
+    return '[' + (i+1) + '] ' + JSON.stringify(preview) + ' 빈칸토큰:[' + toks + ']';
+  }).join('\n');
+  return '아래 Python 코드 줄들에서 특정 토큰이 빈칸으로 제시됩니다.\nreason(왜 중요한지)과 hint(역할 단서, 정답 직접 금지)를 생성하세요.\n\n'
+    + items + '\n\n순수 JSON만 응답:\n{"annotations":[{"idx":<1부터>,"reason":"<한 줄>","hint":"<힌트>"}]}';
+}
+
+
+// ── Phase 2: 선택된 줄의 reason+hint만 요청 (다시 뽑기 시, 토큰 극소) ──
+function buildAnnotatePrompt(selectedLines) {
+  const linesText = selectedLines.map((l,i) =>
+    `[${i+1}] 셀#${l.cell_idx}: ${JSON.stringify(l.line)}`
+  ).join('\n');
+  return `아래 Python 코드 줄들에 대해 학습자에게 보여줄 reason과 hint를 생성하세요.
+
+${linesText}
+
+순수 JSON만 응답:
+{"annotations":[{"idx":<1부터 시작하는 번호>,"reason":"<왜 중요한지 한 줄>","hint":<"힌트 한 줄" 또는 null>}]}`;
+}
+
+// ── 히스토리 기반 랜덤 샘플링 ──
+// pool에서 최근 사용된 줄을 제외하고 샘플링.
+// 모든 줄이 히스토리에 있으면(사이클 완료) 히스토리 초기화 후 재사용.
+function sampleFromPool(name, nPerBlock, diff, consecutive) {
+  const poolData = linePool[name];
+  if (!poolData || !poolData.pool.length) return [];
+  if (!lineHistory[name]) lineHistory[name] = new Set();
+  const hist = lineHistory[name];
+
+  // 난이도 필터 (easy는 easy만, medium은 easy+medium, hard는 전체)
+  const diffOrder = { easy: 0, medium: 1, hard: 2 };
+  const maxDiff = diffOrder[diff] ?? 1;
+  let candidates = poolData.pool.filter(p => (diffOrder[p.diff] ?? 1) <= maxDiff);
+  if (!candidates.length) candidates = poolData.pool; // fallback
+
+  // 히스토리 제외
+  let fresh = candidates.filter(p => !hist.has(`${p.cell_idx}::${p.line}`));
+  // 사이클 완료 시 히스토리 리셋
+  if (fresh.length < nPerBlock) {
+    hist.clear();
+    fresh = candidates;
+  }
+
+  // 셀별로 그룹화
+  const byCellMap = {};
+  fresh.forEach(p => {
+    if (!byCellMap[p.cell_idx]) byCellMap[p.cell_idx] = [];
+    byCellMap[p.cell_idx].push(p);
+  });
+  const cellKeys = Object.keys(byCellMap);
+
+  // Fisher-Yates shuffle (셀 순서)
+  const shuffledCells = [...cellKeys];
+  for (let i = shuffledCells.length-1; i>0; i--) {
+    const j = Math.floor(Math.random()*(i+1));
+    [shuffledCells[i],shuffledCells[j]] = [shuffledCells[j],shuffledCells[i]];
+  }
+
+  const selected = [];
+  for (const ck of shuffledCells) {
+    if (selected.length >= nPerBlock) break;
+    const cellLines = byCellMap[ck].slice();
+    // Fisher-Yates shuffle (줄 순서)
+    for (let i=cellLines.length-1;i>0;i--){
+      const j=Math.floor(Math.random()*(i+1));
+      [cellLines[i],cellLines[j]]=[cellLines[j],cellLines[i]];
+    }
+    const needed = Math.min(nPerBlock - selected.length, consecutive ? cellLines.length : 1);
+    // 연속 모드: 원본 코드에서 연속된 줄 우선
+    if (consecutive && cellLines.length >= 2) {
+      const src = files[activeFile]?.strippedCells?.find(c=>c.idx===parseInt(ck))?.src || '';
+      const srcLines = src.split('\n');
+      // 선택된 줄들 중 연속 묶음 찾기
+      const idxInSrc = cellLines.map(p => srcLines.indexOf(p.line)).filter(i=>i>=0).sort((a,b)=>a-b);
+      let bestStart = 0;
+      for (let i=0; i<idxInSrc.length-1; i++) {
+        if (idxInSrc[i+1]-idxInSrc[i]===1) { bestStart=i; break; }
+      }
+      const pick = cellLines.slice(bestStart, bestStart+needed);
+      selected.push(...pick);
+    } else {
+      selected.push(...cellLines.slice(0, needed));
+    }
+  }
+
+  // 히스토리에 추가
+  selected.forEach(p => hist.add(`${p.cell_idx}::${p.line}`));
+  return selected;
+}
+
+// ── generate ──
+$('gen-btn').addEventListener('click', () => generateForFile(activeFile, false));
+$('regen-btn').addEventListener('click', () => generateForFile(activeFile, true));
+
+async function generateForFile(name, isRegen) {
+  if (!name || !files[name]) return;
+  if (generatingFiles.has(name)) return;
+
+  const key = $('api-key').value.trim();
+  const diff = $('diff').value;
+  currentDiff = diff;
+
+  // ── easy 모드: Claude 없이 로컬 처리 ──
+  if (diff === 'easy') {
+    const pct = parseInt($('easy-pct').value);
+    const maxTok = parseInt($('easy-tokens').value);
+    generatingFiles.add(name); renderFList(); ready();
+    if (activeFile === name) {
+      $('empty').style.display='none';
+      $('qpanel').classList.remove('on'); $('qpanel').style.display='none';
+      $('score').style.display='none'; $('loading').classList.add('on');
+      prog(20, '토큰 빈칸 생성 중...');
+    }
+    try {
+      // Phase 1: 로컬 샘플링
+      const easyBlanks = buildEasyBlanks(files[name].strippedCells, pct, maxTok);
+      if (!easyBlanks.length) throw new Error('출제 가능한 토큰이 없어요.');
+      prog(50, 'reason/hint 생성 중...');
+      // Phase 2: reason+hint만 Claude 요청 (작은 프롬프트)
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method:'POST',
+        headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+        body: JSON.stringify({model:'claude-sonnet-4-6',max_tokens:2000,
+          messages:[{role:'user',content:buildEasyAnnotatePrompt(easyBlanks)}]})
+      });
+      if (!res.ok) { const e=await res.json().catch(()=>({})); throw new Error(e.error?.message||'HTTP '+res.status); }
+      const d = await res.json();
+      const raw = d.content[0].text.trim().replace(/```json|```/g,'').trim();
+      const anns = JSON.parse(raw).annotations;
+      anns.forEach(a => { if (easyBlanks[a.idx-1]) { easyBlanks[a.idx-1].reason=a.reason||''; easyBlanks[a.idx-1].hint=a.hint||null; } });
+      quizCache[name] = { blanks: easyBlanks, mode: 'easy' };
+      generatingFiles.delete(name); renderFList(); ready();
+      if (activeFile === name) {
+        prog(90,'렌더링 중...');
+        renderQuiz(files[name].strippedCells, easyBlanks);
+        prog(100,'완료!');
+        setTimeout(() => { $('loading').classList.remove('on'); $('qpanel').classList.add('on'); $('qpanel').style.display='flex'; $('score').style.display='flex'; updateScore(); }, 280);
+      } else { toast('✓ ' + name + ' 퀴즈 생성 완료'); }
+    } catch(e) {
+      generatingFiles.delete(name); renderFList(); ready();
+      if (activeFile===name){$('loading').classList.remove('on');$('empty').style.display='flex';}
+      toast('⚠ '+name+' 오류: '+e.message);
+    }
+    return;
+  }
+
+  const nPerBlock = parseInt($('n-per-block').value);
+
+  generatingFiles.add(name);
+  renderFList(); ready();
+
+  if (activeFile === name) {
+    $('empty').style.display='none';
+    $('qpanel').classList.remove('on'); $('qpanel').style.display='none';
+    $('score').style.display='none';
+    $('loading').classList.add('on');
+    prog(5, '준비 중...');
+  }
+
+  try {
+    // ── Phase 1: pool이 없으면 Claude로 생성 ──
+    if (!linePool[name] || !linePool[name].generated) {
+      if (activeFile === name) prog(15, '출제 가능한 줄 분석 중...');
+      const { notebookContent, instruction } = buildPoolPrompt(files[name].strippedCells);
+
+      const res1 = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': key,
+          'anthropic-version': '2023-06-01',
+          'anthropic-beta': 'prompt-caching-2024-07-31',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 4000,
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'text', text: notebookContent, cache_control: { type: 'ephemeral' } },
+              { type: 'text', text: instruction }
+            ]
+          }]
+        })
+      });
+      if (!res1.ok) { const e=await res1.json().catch(()=>({})); throw new Error(e.error?.message||`HTTP ${res1.status}`); }
+      const d1 = await res1.json();
+      const usage1 = d1.usage;
+      if (usage1?.cache_creation_input_tokens > 0) toast(`${name}: pool 캐시 저장 — 다음부터 90% 할인`);
+      else if (usage1?.cache_read_input_tokens > 0) toast(`✓ ${name}: 캐시 HIT`);
+
+      const raw1 = d1.content[0].text.trim().replace(/```json|```/g,'').trim();
+      const poolItems = JSON.parse(raw1).pool;
+      linePool[name] = { pool: poolItems, generated: true };
+      lineHistory[name] = new Set();
+    }
+
+    // ── Phase 2: pool에서 랜덤 샘플링 ──
+    if (activeFile === name) prog(55, '랜덤 샘플링 중...');
+    const sampled = sampleFromPool(name, nPerBlock, diff, consecutiveMode);
+    if (!sampled.length) throw new Error('출제 가능한 줄이 없어요. 설정을 바꿔보세요.');
+
+    // ── Phase 3: 선택된 줄에 대한 reason+hint만 Claude에 요청 ──
+    if (activeFile === name) prog(65, 'reason/hint 생성 중...');
+    const annotatePrompt = buildAnnotatePrompt(sampled);
+    const res2 = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 1000,
+        messages: [{ role: 'user', content: annotatePrompt }]
+      })
+    });
+    if (!res2.ok) { const e=await res2.json().catch(()=>({})); throw new Error(e.error?.message||`HTTP ${res2.status}`); }
+    const d2 = await res2.json();
+    const raw2 = d2.content[0].text.trim().replace(/```json|```/g,'').trim();
+    const annotations = JSON.parse(raw2).annotations;
+
+    // sampled + annotations 병합 → blanks 형태로
+    const blanks = sampled.map((s, i) => {
+      const ann = annotations.find(a => a.idx === i+1) || {};
+      return {
+        cell_idx: s.cell_idx,
+        original_line: s.line,
+        reason: ann.reason || '',
+        hint: ann.hint || null
+      };
+    });
+
+    quizCache[name] = { blanks };
+    generatingFiles.delete(name);
+    renderFList(); ready();
+
+    if (activeFile === name) {
+      prog(90, '렌더링 중...');
+      renderQuiz(files[name].strippedCells, blanks);
+      prog(100, '완료!');
+      setTimeout(() => {
+        $('loading').classList.remove('on');
+        $('qpanel').classList.add('on'); $('qpanel').style.display='flex';
+        $('score').style.display='flex';
+        updateScore();
+      }, 280);
+    } else {
+      toast(`✓ ${name} 퀴즈 생성 완료`);
+    }
+
+  } catch(e) {
+    generatingFiles.delete(name);
+    renderFList(); ready();
+    if (activeFile === name) { $('loading').classList.remove('on'); $('empty').style.display='flex'; }
+    toast(`⚠ ${name} 오류: ${e.message}`);
+  }
+}
+
+function prog(p, msg) { $('load-fill').style.width=p+'%'; $('load-txt').textContent=msg; }
+
+$('reset-all-btn').addEventListener('click', () => {
+  if (!confirm('모든 파일의 퀴즈를 초기화할까요?\n(출제 pool도 함께 초기화됩니다)')) return;
+  Object.keys(quizCache).forEach(k => delete quizCache[k]);
+  Object.keys(linePool).forEach(k => delete linePool[k]);
+  Object.keys(lineHistory).forEach(k => delete lineHistory[k]);
+  renderFList(); hideQuiz(); toast('모든 퀴즈 초기화됨');
+});
+
+// ── renderQuiz ──
+function renderQuiz(strippedCells, blanks) {
+  const container = $('cells');
+  // 완전 초기화 — 이전 입력값/채점 상태 제거 (다시 뽑기 버그 수정)
+  container.innerHTML = '';
+  $('qfile').textContent = activeFile;
+
+  const isEasyMode = blanks.length > 0 && blanks[0].type === 'token';
+  const showReasons = currentDiff !== 'hard';
+
+  if (isEasyMode) {
+    renderQuizEasy(strippedCells, blanks, container);
+    return;
+  }
+
+  // ── medium / hard 모드 (줄 단위) ──
+  const bmap = {};
+  blanks.forEach(b => { if (!bmap[b.cell_idx]) bmap[b.cell_idx]=[]; bmap[b.cell_idx].push(b); });
+  let gNum = 1;
+  const bNums = {};
+  blanks.forEach(b => { bNums[b.cell_idx+'::'+b.original_line] = gNum++; });
+
+  // 방어 로직: 블락당 실제 줄 수 초과하지 않도록
+  Object.keys(bmap).forEach(cidx => {
+    const cell = strippedCells.find(c => c.idx === parseInt(cidx));
+    if (!cell) return;
+    const codeLines = cell.src.split('
+').filter(l => l.trim()).length;
+    const maxBlanks = Math.min(bmap[cidx].length, Math.max(1, Math.min(5, codeLines)));
+    bmap[cidx] = bmap[cidx].slice(0, maxBlanks);
+  });
+
+  strippedCells.forEach(cell => {
+    const hasBlank = !!bmap[cell.idx];
+    const wrap = document.createElement('div');
+    wrap.className = 'cell' + (hasBlank ? ' has-blank' : '');
+    const gutter = document.createElement('div'); gutter.className = 'cell-gutter';
+    const execNum = document.createElement('div'); execNum.className = 'cell-exec-num';
+    execNum.textContent = cell.type === 'code' ? '[ '+cell.idx+' ]' : '';
+    gutter.appendChild(execNum);
+    if (hasBlank) {
+      const bkb = document.createElement('button');
+      bkb.className = 'bk-btn' + (isBookmarked(cell.idx) ? ' on' : '');
+      bkb.title = '오답 복습에 저장'; bkb.textContent = '🔖';
+      bkb.addEventListener('click', () => {
+        const origSrc = files[activeFile].strippedCells[cell.idx]?.src || cell.src;
+        toggleBk({ idx: cell.idx, src: origSrc }, bmap[cell.idx], bkb);
+      });
+      gutter.appendChild(bkb);
+    }
+    wrap.appendChild(gutter);
+    const inner = document.createElement('div'); inner.className = 'cell-inner';
+
+    if (cell.type === 'markdown') {
+      const body = document.createElement('div'); body.className = 'cell-body md';
+      body.innerHTML = renderMarkdown(cell.src);
+      inner.appendChild(body);
+      requestAnimationFrame(() => {
+        if (window.renderMathInElement) renderMathInElement(body, {
+          delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false},{left:'\(',right:'\)',display:false},{left:'\[',right:'\]',display:true}],throwOnError:false});
+      });
+    } else {
+      const body = document.createElement('div'); body.className = 'cell-body';
+      if (hasBlank) {
+        const blankSet = new Map();
+        bmap[cell.idx].forEach(b => blankSet.set(b.original_line, b));
+        const lines = cell.src.split('
+');
+        lines.forEach((line, li) => {
+          const match = blankSet.get(line);
+          if (match) {
+            const indent = line.match(/^(\s*)/)[1];
+            const content = line.slice(indent.length);
+            const wrapper = document.createElement('span');
+            wrapper.className = 'blank-line';
+            wrapper.style.paddingLeft = (indent.length * chPx) + 'px';
+            wrapper.style.display = 'block';
+            const field = document.createElement('span'); field.className = 'bl-field';
+            field.dataset.answer = content; field.dataset.indent = indent;
+            const bNum = bNums[cell.idx+'::'+line]; field.dataset.num = bNum;
+            const tag = document.createElement('span'); tag.className='bl-tag t-idx'; tag.textContent=bNum;
+            const inp = document.createElement('input'); inp.type='text'; inp.className='bl-input';
+            inp.placeholder = match.hint || '내용을 입력하세요...';
+            inp.setAttribute('spellcheck','false'); inp.setAttribute('autocorrect','off'); inp.setAttribute('autocapitalize','off');
+            inp.addEventListener('keydown', e => {
+              if (e.key==='Enter'){e.preventDefault();checkField(field,inp);}
+              if (e.key==='Tab'){e.preventDefault();const s=inp.selectionStart,en=inp.selectionEnd;inp.value=inp.value.slice(0,s)+'    '+inp.value.slice(en);inp.selectionStart=inp.selectionEnd=s+4;}
+            });
+            inp.addEventListener('input', () => {
+              field.classList.remove('ok','no','show'); tag.className='bl-tag t-idx'; tag.textContent=field.dataset.num;
+              const tip=field.querySelector('.err-tip'); if(tip) tip.remove();
+            });
+            field.appendChild(tag); field.appendChild(inp);
+            wrapper.appendChild(field); body.appendChild(wrapper);
+            if (li<lines.length-1) body.appendChild(document.createTextNode('\n'));
+          } else {
+            const span=document.createElement('span');
+            span.innerHTML=highlightPython(line)+(li<lines.length-1?'\n':'');
+            body.appendChild(span);
+          }
+        });
+      } else {
+        body.innerHTML = highlightPython(cell.src);
+      }
+      inner.appendChild(body);
+    }
+    if (hasBlank && showReasons) {
+      const strip = document.createElement('div'); strip.className='reason-strip';
+      strip.innerHTML = bmap[cell.idx].filter(b=>b.reason).map(b => {
+        const n2 = bNums[b.cell_idx+'::'+b.original_line];
+        return '<strong>['+n2+']</strong> '+b.reason;
+      }).join('<br>');
+      if (strip.innerHTML) inner.appendChild(strip);
+    }
+    wrap.appendChild(inner); container.appendChild(wrap);
+  });
+}
+
+// ── easy 모드 렌더링 (인라인 토큰 빈칸) ──
+function renderQuizEasy(strippedCells, easyBlanks, container) {
+  // cell_idx → blanks 맵
+  const byCellMap = {};
+  easyBlanks.forEach(b => { if (!byCellMap[b.cell_idx]) byCellMap[b.cell_idx]=[]; byCellMap[b.cell_idx].push(b); });
+
+  strippedCells.forEach(cell => {
+    const cellBlanks = byCellMap[cell.idx] || [];
+    const hasBlank = cellBlanks.length > 0;
+    const wrap = document.createElement('div');
+    wrap.className = 'cell' + (hasBlank ? ' has-blank' : '');
+    const gutter = document.createElement('div'); gutter.className='cell-gutter';
+    const execNum = document.createElement('div'); execNum.className='cell-exec-num';
+    execNum.textContent = cell.type==='code' ? '[ '+cell.idx+' ]' : '';
+    gutter.appendChild(execNum);
+    if (hasBlank) {
+      const bkb=document.createElement('button'); bkb.className='bk-btn'+(isBookmarked(cell.idx)?' on':'');
+      bkb.title='오답 복습에 저장'; bkb.textContent='🔖';
+      bkb.addEventListener('click',()=>{ const s=files[activeFile].strippedCells[cell.idx]?.src||cell.src; toggleBk({idx:cell.idx,src:s},cellBlanks,bkb); });
+      gutter.appendChild(bkb);
+    }
+    wrap.appendChild(gutter);
+    const inner=document.createElement('div'); inner.className='cell-inner';
+
+    if (cell.type==='markdown') {
+      const body=document.createElement('div'); body.className='cell-body md';
+      body.innerHTML=renderMarkdown(cell.src); inner.appendChild(body);
+      requestAnimationFrame(()=>{ if(window.renderMathInElement) renderMathInElement(body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false},{left:'\(',right:'\)',display:false},{left:'\[',right:'\]',display:true}],throwOnError:false}); });
+    } else {
+      const body=document.createElement('div'); body.className='cell-body';
+      if (!hasBlank) { body.innerHTML=highlightPython(cell.src); inner.appendChild(body); wrap.appendChild(inner); container.appendChild(wrap); return; }
+
+      // build line → tokens map for this cell
+      const lineTokenMap = new Map(); // original_line_text → [{token, blankObj}]
+      cellBlanks.forEach(b => {
+        b.group_lines.forEach(gl => {
+          if (!lineTokenMap.has(gl)) lineTokenMap.set(gl, []);
+        });
+        b.tokens.forEach(t => {
+          if (!lineTokenMap.has(t.line)) lineTokenMap.set(t.line, []);
+          lineTokenMap.get(t.line).push({ tok:t, blank:b });
+        });
+      });
+
+      const lines = cell.src.split('\n');
+      lines.forEach((line, li) => {
+        if (lineTokenMap.has(line) && lineTokenMap.get(line).length > 0) {
+          // render line with inline token blanks
+          const entries = lineTokenMap.get(line).sort((a,b)=>a.tok.start-b.tok.start);
+          let cursor = 0;
+          entries.forEach(({tok, blank}) => {
+            // text before token
+            if (cursor < tok.start) {
+              const span=document.createElement('span');
+              span.innerHTML=highlightPython(line.slice(cursor, tok.start));
+              body.appendChild(span);
+            }
+            // token blank
+            const tb = document.createElement('span'); tb.className='tok-blank';
+            const ttag=document.createElement('span'); ttag.className='tok-tag t-idx'; ttag.textContent=blank.num;
+            const tinp=document.createElement('input'); tinp.type='text'; tinp.className='tok-inp';
+            tinp.placeholder='?';
+            tinp.style.width = Math.max(4, tok.text.length+1) + 'ch';
+            tinp.setAttribute('spellcheck','false'); tinp.setAttribute('autocorrect','off'); tinp.setAttribute('autocapitalize','off');
+            tb.dataset.answer=tok.text; tb.dataset.num=blank.num;
+            tinp.addEventListener('keydown', e => { if(e.key==='Enter'){e.preventDefault();checkTokenBlank(tb,tinp);} });
+            tinp.addEventListener('input', () => { tb.classList.remove('ok','no','show'); ttag.className='tok-tag t-idx'; ttag.textContent=blank.num; });
+            tb.appendChild(ttag); tb.appendChild(tinp);
+            body.appendChild(tb);
+            cursor = tok.end;
+          });
+          // rest of line
+          if (cursor < line.length) {
+            const span=document.createElement('span'); span.innerHTML=highlightPython(line.slice(cursor)); body.appendChild(span);
+          }
+          if (li<lines.length-1) body.appendChild(document.createTextNode('\n'));
+
+          // hint line (easy 모드에서는 힌트 표시)
+          const blank0 = entries[0]?.blank;
+          if (blank0?.hint || blank0?.reason) {
+            const hint=document.createElement('span'); hint.className='easy-hint';
+            hint.textContent = (blank0.hint || '') + (blank0.reason ? ' — '+blank0.reason : '');
+            body.appendChild(hint);
+            body.appendChild(document.createTextNode('\n'));
+          }
+        } else {
+          const span=document.createElement('span');
+          span.innerHTML=highlightPython(line)+(li<lines.length-1?'\n':'');
+          body.appendChild(span);
+        }
+      });
+      inner.appendChild(body);
+    }
+    wrap.appendChild(inner); container.appendChild(wrap);
+  });
+}
+
+function renderMarkdown(src) {
+  if (!window.marked) return `<pre>${escH(src)}</pre>`;
+  marked.setOptions({ breaks:true, gfm:true });
+  return marked.parse(src);
+}
+
+// ── token blank check (easy mode) ──
+async function checkTokenBlank(tb, tinp) {
+  if (!tinp.value) return;
+  const tag = tb.querySelector('.tok-tag');
+  tag.className='tok-tag t-idx'; tag.textContent='…';
+  const ans = tb.dataset.answer;
+  const val = tinp.value.trim();
+  // 대소문자 구분 exact match (식별자이므로)
+  if (val === ans) {
+    tb.classList.remove('no','show'); tb.classList.add('ok');
+    tag.className='tok-tag t-ok'; tag.textContent='✓'; tinp.disabled=true;
+  } else {
+    tb.classList.remove('ok','show'); tb.classList.add('no');
+    tag.className='tok-tag t-no'; tag.textContent='✗';
+  }
+  updateScore();
+}
+
+// ── check ──
+async function checkField(field, inp) {
+  if (!inp.value) return;
+  const tag = field.querySelector('.bl-tag');
+  tag.className='bl-tag t-idx'; tag.textContent='…';
+  const tip = field.querySelector('.err-tip'); if(tip) tip.remove();
+
+  const result = await gradeAnswer(inp.value, field.dataset.answer, field.dataset.indent);
+
+  if (result.state==='syntax_err') {
+    field.classList.remove('ok','show'); field.classList.add('no');
+    tag.className='bl-tag t-no'; tag.textContent='!';
+    const t=document.createElement('span'); t.className='err-tip'; t.textContent=result.msg;
+    field.appendChild(t);
+  } else if (result.match) {
+    field.classList.remove('no','show'); field.classList.add('ok');
+    tag.className='bl-tag t-ok'; tag.textContent='✓';
+    inp.disabled=true;
+  } else {
+    field.classList.remove('ok','show'); field.classList.add('no');
+    tag.className='bl-tag t-no'; tag.textContent='✗';
+  }
+  updateScore();
+}
+
+$('check-btn').addEventListener('click', async () => {
+  for (const f of Array.from(document.querySelectorAll('.bl-field'))) {
+    const i=f.querySelector('.bl-input'); if(i&&!i.disabled) await checkField(f,i);
+  }
+  for (const tb of Array.from(document.querySelectorAll('.tok-blank'))) {
+    const i=tb.querySelector('.tok-inp'); if(i&&!i.disabled) await checkTokenBlank(tb,i);
+  }
+});
+$('reveal-btn').addEventListener('click', () => {
+  document.querySelectorAll('.bl-field').forEach(f => {
+    const i=f.querySelector('.bl-input'); if(i&&!i.disabled) {
+      i.value=f.dataset.answer; i.disabled=true;
+      f.classList.remove('ok','no'); f.classList.add('show');
+      const t=f.querySelector('.bl-tag'); t.className='bl-tag t-show'; t.textContent='!';
+      const tip=f.querySelector('.err-tip'); if(tip) tip.remove();
+    }
+  });
+  document.querySelectorAll('.tok-blank').forEach(tb => {
+    const i=tb.querySelector('.tok-inp'); if(i&&!i.disabled) {
+      i.value=tb.dataset.answer; i.disabled=true;
+      tb.classList.remove('ok','no'); tb.classList.add('show');
+      const t=tb.querySelector('.tok-tag'); t.className='tok-tag t-show'; t.textContent='!';
+    }
+  });
+  updateScore();
+});
+$('reset-btn').addEventListener('click', () => {
+  document.querySelectorAll('.bl-field').forEach(f => {
+    const i=f.querySelector('.bl-input'); i.disabled=false; i.value='';
+    f.classList.remove('ok','no','show');
+    const t=f.querySelector('.bl-tag'); t.className='bl-tag t-idx'; t.textContent=f.dataset.num;
+    const tip=f.querySelector('.err-tip'); if(tip) tip.remove();
+  });
+  document.querySelectorAll('.tok-blank').forEach(tb => {
+    const i=tb.querySelector('.tok-inp'); i.disabled=false; i.value='';
+    tb.classList.remove('ok','no','show');
+    const t=tb.querySelector('.tok-tag'); t.className='tok-tag t-idx'; t.textContent=tb.dataset.num;
+  });
+  updateScore();
+});
+
+function updateScore() {
+  const all = document.querySelectorAll('.bl-field,.tok-blank').length;
+  const c   = document.querySelectorAll('.bl-field.ok,.tok-blank.ok').length;
+  const tried=document.querySelectorAll('.bl-field.ok,.bl-field.no,.bl-field.show,.tok-blank.ok,.tok-blank.no,.tok-blank.show').length;
+  const rem = all - document.querySelectorAll('.bl-field.ok,.bl-field.show,.tok-blank.ok,.tok-blank.show').length;
+  $('sc-c').textContent=c; $('sc-t').textContent=tried; $('sc-r').textContent=rem;
+}
+
+// ── bookmarks ──
+function isBookmarked(cellIdx) { return bookmarks.some(b=>b.cellIdx===cellIdx&&b.file===activeFile); }
+function toggleBk(cell, cellBlanks, btn) {
+  const idx=bookmarks.findIndex(b=>b.cellIdx===cell.idx&&b.file===activeFile);
+  if(idx>=0) { bookmarks.splice(idx,1); btn.classList.remove('on'); toast('🔖 복습 노트에서 제거됨'); }
+  else {
+    const id=`${activeFile}::${cell.idx}`;
+    bookmarks.push({ id, file:activeFile, cellIdx:cell.idx, src:cell.src, blanks:cellBlanks, note:'', savedAt:Date.now() });
+    // 첫 등록 시 SR 초기화 (내일 복습)
+    if (!srData[id]) sm2Update(id, 0);
+    btn.classList.add('on'); toast('🔖 복습 노트에 저장됨');
+  }
+  saveBk(); updateBkBadge();
+}
+function saveBk() { localStorage.setItem('nbq_bk',JSON.stringify(bookmarks)); }
+function updateBkBadge() {
+  const el=$('bk-cnt');
+  const due = srDueCount();
+  if(bookmarks.length>0){
+    el.style.display='inline-flex';
+    // due 항목 있으면 빨간 강조
+    el.textContent = due > 0 ? `${due}` : bookmarks.length;
+    el.style.background = due > 0 ? 'var(--rbg)' : 'var(--obg)';
+    el.style.color = due > 0 ? 'var(--red)' : 'var(--orange)';
+  } else el.style.display='none';
+}
+
+function renderReview() {
+  const el=$('rev-body'); el.innerHTML='';
+  if(!bookmarks.length) {
+    el.innerHTML=`<div class="rev-empty"><div class="rev-empty-ic">🔖</div><div class="rev-empty-t">저장된 오답이 없어요</div><div class="rev-empty-s">퀴즈에서 셀 사이드의 🔖를 눌러 저장하세요</div></div>`;
+    return;
+  }
+
+  const today = new Date().toISOString().slice(0,10);
+  // 복습 예정일 기준 정렬 (오늘/지난 것 먼저)
+  const sorted = bookmarks.slice().sort((a,b) => {
+    const da = srData[a.id]?.nextReview || '0000-00-00';
+    const db = srData[b.id]?.nextReview || '0000-00-00';
+    return da.localeCompare(db);
+  });
+
+  sorted.forEach(bk => {
+    const sr = srData[bk.id] || {};
+    const isDue = !sr.nextReview || sr.nextReview <= today;
+    const card=document.createElement('div'); card.className='bk-card';
+
+    // SR 헤더
+    const srBadge = isDue
+      ? `<span style="font-size:10px;background:var(--rbg);color:var(--red);padding:1px 6px;border-radius:2px;font-weight:600">복습 필요</span>`
+      : `<span style="font-size:10px;background:var(--gbg);color:var(--green);padding:1px 6px;border-radius:2px">${sr.nextReview} 복습</span>`;
+    const srInfo = sr.reps != null
+      ? `<span style="font-size:10px;color:var(--text3)">반복 ${sr.reps}회 · 간격 ${sr.interval || 1}일</span>`
+      : '';
+    const srActions = `
+      <button class="sr-btn sr-fail" data-id="${bk.id}" title="다시 틀림 — 내일 복습">❌</button>
+      <button class="sr-btn sr-hard" data-id="${bk.id}" title="겨우 맞음 — 짧은 간격">😅</button>
+      <button class="sr-btn sr-ok"   data-id="${bk.id}" title="잘 맞음 — 간격 늘리기">✅</button>`;
+
+    const hdr=document.createElement('div'); hdr.className='bk-card-hdr';
+    hdr.innerHTML=`
+      <span class="bk-card-title">${bk.file} · 셀 #${bk.cellIdx}</span>
+      ${srBadge} ${srInfo}
+      <div style="margin-left:auto;display:flex;align-items:center;gap:4px">
+        ${srActions}
+        <button class="bk-del" data-id="${bk.id}">✕</button>
+      </div>`;
+
+    hdr.querySelector('.bk-del').addEventListener('click', () => {
+      const i=bookmarks.findIndex(b=>b.id===bk.id);
+      if(i>=0){bookmarks.splice(i,1);saveBk();updateBkBadge();renderReview();}
+    });
+    // SR 버튼
+    hdr.querySelectorAll('.sr-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const grade = btn.classList.contains('sr-fail') ? 0 : btn.classList.contains('sr-hard') ? 1 : 2;
+        const d = sm2Update(bk.id, grade);
+        toast(`다음 복습: ${d.nextReview} (${d.interval}일 후)`);
+        renderReview(); updateBkBadge();
+      });
+    });
+    card.appendChild(hdr);
+
+    const pre=document.createElement('pre');
+    const blankSet=new Set(bk.blanks.map(b=>b.original_line));
+    bk.src.split('\n').forEach((line,li,arr) => {
+      if(blankSet.has(line)){const sp=document.createElement('span');sp.className='missing-line';sp.textContent=line;pre.appendChild(sp);}
+      else pre.appendChild(document.createTextNode(li<arr.length-1?line+'\n':line));
+    });
+    card.appendChild(pre);
+    if(bk.blanks&&bk.blanks.length>0){
+      const strip=document.createElement('div');strip.className='reason-strip';
+      strip.innerHTML=bk.blanks.map(b=>`<strong>[빈칸]</strong> ${b.reason}`).join('<br>');
+      card.appendChild(strip);
+    }
+    const nw=document.createElement('div');nw.className='bk-note-wrap';
+    const ta=document.createElement('textarea');ta.className='bk-note';ta.rows=2;
+    ta.placeholder='메모 추가... (자동 저장)';ta.value=bk.note||'';
+    ta.addEventListener('input',()=>{const b=bookmarks.find(b=>b.id===bk.id);if(b){b.note=ta.value;saveBk();}});
+    nw.appendChild(ta);card.appendChild(nw);
+    el.appendChild(card);
+  });
+}
+$('clear-btn').addEventListener('click',()=>{
+  if(!bookmarks.length)return;
+  if(confirm('저장된 복습 노트를 모두 삭제할까요?')){bookmarks=[];saveBk();updateBkBadge();renderReview();}
+});
+
+updateBkBadge(); ready();
+</script>
+</body>
+</html>
