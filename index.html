@@ -105,13 +105,27 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text); min-hei
 .file-list-wrap::-webkit-scrollbar-thumb { background:var(--bg4); border-radius:2px }
 .upload-zone {
   border:1.5px dashed var(--border2); border-radius:var(--rs);
-  padding:12px; text-align:center; cursor:pointer; transition:all .15s;
-  position:relative; margin-bottom:7px; background:#fff;
+  padding:10px; text-align:center; transition:all .15s;
+  margin-bottom:7px; background:#fff;
 }
 .upload-zone:hover { border-color:var(--accent); background:var(--abg) }
-.upload-zone input { position:absolute; inset:0; opacity:0; cursor:pointer }
-.uz-text { font-size:12px; color:var(--text2) }
-.uz-sub { font-size:11px; color:var(--text3); margin-top:2px }
+.uz-btn {
+  display:block; width:100%; background:var(--accent); color:#fff;
+  border:none; border-radius:var(--rs); font-family:var(--sans);
+  font-size:13px; font-weight:600; padding:8px; cursor:pointer;
+  -webkit-appearance:none; appearance:none;
+}
+.uz-btn:active { opacity:.8 }
+.uz-sub { font-size:11px; color:var(--text3); margin-top:5px }
+.paste-zone { margin-bottom:7px }
+.paste-btn {
+  display:block; width:100%; background:#2e7d32; color:#fff;
+  border:none; border-radius:var(--rs); font-family:var(--sans);
+  font-size:13px; font-weight:600; padding:8px; cursor:pointer;
+  -webkit-appearance:none; appearance:none; margin-bottom:3px;
+}
+.paste-btn:active { opacity:.8 }
+.paste-sub { font-size:11px; color:var(--text3); text-align:center }
 .fi {
   display:flex; align-items:center; gap:6px; padding:7px 8px;
   border-radius:var(--rs); cursor:pointer; border:1px solid transparent;
@@ -382,10 +396,36 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text); min-hei
   </div>
   <div class="file-list-wrap">
     <div class="sb-lbl" style="padding:2px 2px 6px">노트북 파일</div>
+    <!-- 파일 피커 (데스크탑) -->
     <div class="upload-zone" id="dzone">
-      <input type="file" id="file-in" accept="*/*" multiple/>
-      <div class="uz-text">📂 파일 추가</div>
-      <div class="uz-sub">.ipynb · 여러 파일 가능</div>
+      <button class="uz-btn" id="uz-btn" type="button">📂 파일 추가 (데스크탑)</button>
+    </div>
+    <input type="file" id="file-in" accept="*/*" multiple
+      style="position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0"/>
+    <!-- 붙여넣기 (iOS/iPad) -->
+    <div class="paste-zone" id="paste-zone">
+      <button class="paste-btn" id="paste-btn" type="button">📋 붙여넣기로 추가 (iPad)</button>
+      <div class="paste-sub">맥북에서 .ipynb 내용 복사 후</div>
+    </div>
+    <!-- paste 모달 -->
+    <div id="paste-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:500;display:none;align-items:center;justify-content:center;padding:20px">
+      <div style="background:#fff;border-radius:8px;padding:16px;width:100%;max-width:560px;max-height:80vh;display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:14px;font-weight:600;color:#111">📋 노트북 내용 붙여넣기</span>
+          <button id="paste-close" style="background:none;border:none;font-size:18px;cursor:pointer;color:#888">✕</button>
+        </div>
+        <div style="font-size:12px;color:#555;line-height:1.6">
+          맥북 터미널에서: <code style="background:#f0f0f0;padding:1px 5px;border-radius:2px;font-family:monospace">cat 파일명.ipynb | pbcopy</code><br>
+          또는 파일을 텍스트 에디터로 열고 전체 선택(⌘A) → 복사(⌘C)
+        </div>
+        <input id="paste-name" type="text" placeholder="파일 이름 (예: chapter1.ipynb)"
+          style="border:1px solid #ddd;border-radius:4px;padding:7px 10px;font-size:13px;outline:none"/>
+        <textarea id="paste-content" placeholder=".ipynb 파일 내용을 여기에 붙여넣으세요 (⌘V 또는 길게 눌러 붙여넣기)..."
+          style="flex:1;min-height:200px;border:1px solid #ddd;border-radius:4px;padding:10px;font-family:monospace;font-size:11px;resize:none;outline:none;line-height:1.5"></textarea>
+        <button id="paste-confirm" style="background:#1565c0;color:#fff;border:none;border-radius:4px;padding:10px;font-size:14px;font-weight:600;cursor:pointer">
+          ✓ 추가하기
+        </button>
+      </div>
     </div>
     <div id="flist"></div>
   </div>
@@ -715,11 +755,59 @@ if (savedKey) $('api-key').value = savedKey;
 $('api-key').addEventListener('input', () => { localStorage.setItem('nbq_key', $('api-key').value.trim()); ready(); });
 
 // ── file handling ──
-$('file-in').addEventListener('change', e => loadFiles(e.target.files));
+// 파일 input — iOS 호환을 위해 버튼 클릭 → input.click() 트리거
+const fileIn = $('file-in');
+fileIn.addEventListener('change', e => {
+  dbg('change event fired, files=' + e.target.files.length);
+  loadFiles(e.target.files);
+  e.target.value = '';
+});
+$('uz-btn').addEventListener('click', () => { dbg('uz-btn clicked'); fileIn.click(); });
+
+// 데스크탑용 드래그앤드롭
 const dzone = $('dzone');
 dzone.addEventListener('dragover', e => { e.preventDefault(); dzone.style.borderColor='var(--accent)'; });
 dzone.addEventListener('dragleave', () => { dzone.style.borderColor=''; });
 dzone.addEventListener('drop', e => { e.preventDefault(); dzone.style.borderColor=''; loadFiles(e.dataTransfer.files); });
+
+// ── 붙여넣기 모달 (iOS 파일 피커 우회) ──
+function openPasteModal() {
+  const m = $('paste-modal');
+  m.style.display = 'flex';
+  setTimeout(() => $('paste-content').focus(), 100);
+}
+function closePasteModal() {
+  $('paste-modal').style.display = 'none';
+  $('paste-content').value = '';
+  $('paste-name').value = '';
+}
+$('paste-btn').addEventListener('click', openPasteModal);
+$('paste-close').addEventListener('click', closePasteModal);
+$('paste-modal').addEventListener('click', e => { if (e.target === $('paste-modal')) closePasteModal(); });
+$('paste-confirm').addEventListener('click', () => {
+  const raw = $('paste-content').value.trim();
+  let name = $('paste-name').value.trim() || ('notebook_' + Date.now() + '.ipynb');
+  if (!name.endsWith('.ipynb')) name += '.ipynb';
+  if (!raw) { toast('⚠ 내용을 붙여넣어주세요'); return; }
+  try {
+    const nb = JSON.parse(raw);
+    if (!nb.cells) { toast('⚠ 유효한 .ipynb 형식이 아닙니다'); return; }
+    const strippedCells = nb.cells.map((c, i) => ({
+      idx: i, type: c.cell_type,
+      src: c.cell_type === 'code'
+        ? stripComments(Array.isArray(c.source) ? c.source.join('') : (c.source || ''))
+        : (Array.isArray(c.source) ? c.source.join('') : (c.source || ''))
+    }));
+    files[name] = { nb, strippedCells };
+    if (!activeFile) activeFile = name;
+    renderFList(); ready();
+    toast('✓ ' + name + ' 로드됨 (' + nb.cells.length + '개 셀)');
+    if (activeFile === name) showFileQuiz(name);
+    closePasteModal();
+  } catch(e) {
+    toast('⚠ JSON 파싱 실패: ' + e.message);
+  }
+});
 
 function loadFiles(list) {
   dbg('loadFiles called, count=' + (list ? list.length : 'null'));
@@ -1704,7 +1792,7 @@ function dbg(msg) {
 // URL에 ?debug 있으면 자동 표시
 if (location.search.includes('debug')) $('dbg-panel').style.display = 'block';
 // 파일 input 클릭 이벤트 로깅
-$('file-in').addEventListener('click', () => { dbg('file picker opened'); $('dbg-panel').style.display='block'; });
+$('uz-btn').addEventListener('click', () => { dbg('uz-btn tapped'); }, true);
 
 updateBkBadge(); ready();
 </script>
