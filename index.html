@@ -432,7 +432,7 @@ body.modal-open { overflow:hidden; }
       <input class="gdrive-client-input" id="gdrive-client-id" type="text"
         placeholder="OAuth Client ID (xxxx.apps.googleusercontent.com)"
         autocomplete="off"/>
-      <div class="gdrive-sub">Google Cloud Console에서 OAuth 2.0 클라이언트 ID 생성 필요<br>※ http://localhost 에서 실행해야 동작</div>
+      <div class="gdrive-sub">Google Cloud Console에서 OAuth 2.0 클라이언트 ID 생성 필요</div>
     </div>
     <div id="flist"></div>
   </div>
@@ -1247,14 +1247,19 @@ async function generateForFile(name, isRegen) {
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method:'POST',
         headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-        body: JSON.stringify({model:'claude-sonnet-4-6',max_tokens:2000,
+        body: JSON.stringify({model:'claude-sonnet-4-6',max_tokens:4096,
           messages:[{role:'user',content:buildEasyAnnotatePrompt(easyBlanks)}]})
       });
       if (!res.ok) { const e=await res.json().catch(()=>({})); throw new Error(e.error?.message||'HTTP '+res.status); }
       const d = await res.json();
       const raw = d.content[0].text.trim().replace(/```json|```/g,'').trim();
-      const anns = JSON.parse(raw).annotations;
-      anns.forEach(a => { if (easyBlanks[a.idx-1]) { easyBlanks[a.idx-1].reason=a.reason||''; easyBlanks[a.idx-1].hint=a.hint||null; } });
+      try {
+        const anns = JSON.parse(raw).annotations;
+        anns.forEach(a => { if (easyBlanks[a.idx-1]) { easyBlanks[a.idx-1].reason=a.reason||''; easyBlanks[a.idx-1].hint=a.hint||null; } });
+      } catch(pe) {
+        // 응답이 잘려서 JSON 파싱 실패 시 — reason/hint 없이 진행
+        dbg('easy annotate JSON parse failed: ' + pe.message);
+      }
       quizCache[name] = { blanks: easyBlanks, mode: 'easy' };
       generatingFiles.delete(name); renderFList(); ready();
       if (activeFile === name) {
