@@ -126,6 +126,23 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text); min-hei
 }
 .paste-btn:active { opacity:.8 }
 .paste-sub { font-size:11px; color:var(--text3); text-align:center }
+.gdrive-zone { margin-bottom:7px }
+.gdrive-btn {
+  display:block; width:100%; background:#1a73e8; color:#fff;
+  border:none; border-radius:var(--rs); font-family:var(--sans);
+  font-size:13px; font-weight:600; padding:8px; cursor:pointer;
+  -webkit-appearance:none; appearance:none; margin-bottom:3px;
+}
+.gdrive-btn:active { opacity:.8 }
+.gdrive-btn:disabled { opacity:.5; cursor:not-allowed }
+.gdrive-sub { font-size:10px; color:var(--text3); line-height:1.5; margin-top:3px }
+.gdrive-client-input {
+  width:100%; background:#fff; border:1px solid var(--border2);
+  border-radius:var(--rs); color:var(--text); font-family:var(--mono);
+  font-size:10px; padding:5px 7px; outline:none; transition:border .15s;
+  margin-top:4px; display:block;
+}
+.gdrive-client-input:focus { border-color:#1a73e8 }
 .fi {
   display:flex; align-items:center; gap:6px; padding:7px 8px;
   border-radius:var(--rs); cursor:pointer; border:1px solid transparent;
@@ -406,6 +423,24 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text); min-hei
     <div class="paste-zone" id="paste-zone">
       <button class="paste-btn" id="paste-btn" type="button">📋 붙여넣기로 추가 (iPad)</button>
       <div class="paste-sub">맥북에서 .ipynb 내용 복사 후</div>
+    </div>
+    <!-- Google Drive 구역 -->
+    <div class="gdrive-zone" id="gdrive-zone">
+      <button class="gdrive-btn" id="gdrive-btn" type="button">🔵 Google Drive에서 열기</button>
+      <input class="gdrive-client-input" id="gdrive-client-id" type="text"
+        placeholder="OAuth Client ID (xxxx.apps.googleusercontent.com)"
+        autocomplete="off"/>
+      <div class="gdrive-sub">Google Cloud Console에서 OAuth 2.0 클라이언트 ID 생성 필요<br>※ http://localhost 에서 실행해야 동작</div>
+    </div>
+    <!-- Google Drive 파일 목록 모달 -->
+    <div id="gdrive-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:500;padding:20px;align-items:center;justify-content:center">
+      <div style="background:#fff;border-radius:8px;width:100%;max-width:480px;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.18)">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid #eee">
+          <span style="font-size:14px;font-weight:600;color:#111">🔵 Google Drive 파일 선택</span>
+          <button id="gdrive-close" style="background:none;border:none;font-size:18px;cursor:pointer;color:#888;line-height:1">✕</button>
+        </div>
+        <div id="gdrive-file-list" style="flex:1;overflow-y:auto"></div>
+      </div>
     </div>
     <!-- paste 모달 -->
     <div id="paste-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:500;padding:20px;align-items:center;justify-content:center">
@@ -773,13 +808,13 @@ dzone.addEventListener('drop', e => { e.preventDefault(); dzone.style.borderColo
 // ── 붙여넣기 모달 (iOS 파일 피커 우회) ──
 function openPasteModal() {
   const m = $('paste-modal');
-  m.style.setProperty('display', 'flex', 'important');
+  m.style.display = 'flex';
   m.style.alignItems = 'center';
   m.style.justifyContent = 'center';
-  setTimeout(() => { try { $('paste-content').focus(); } catch(e){} }, 100);
+  setTimeout(() => { try { $('paste-name').focus(); } catch(e){} }, 100);
 }
 function closePasteModal() {
-  $('paste-modal').style.setProperty('display', 'none', 'important');
+  $('paste-modal').style.display = 'none';
   $('paste-content').value = '';
   $('paste-name').value = '';
 }
@@ -788,9 +823,10 @@ $('paste-close').addEventListener('click', closePasteModal);
 $('paste-modal').addEventListener('click', e => { if (e.target === $('paste-modal')) closePasteModal(); });
 $('paste-confirm').addEventListener('click', () => {
   const raw = $('paste-content').value.trim();
-  let name = $('paste-name').value.trim() || ('notebook_' + Date.now() + '.ipynb');
+  let name = $('paste-name').value.trim();
+  if (!name) { toast('⚠ 파일 이름을 입력해주세요'); $('paste-name').focus(); return; }
   if (!name.endsWith('.ipynb')) name += '.ipynb';
-  if (!raw) { toast('⚠ 내용을 붙여넣어주세요'); return; }
+  if (!raw) { toast('⚠ 내용을 붙여넣어주세요'); $('paste-content').focus(); return; }
   try {
     const nb = JSON.parse(raw);
     if (!nb.cells) { toast('⚠ 유효한 .ipynb 형식이 아닙니다'); return; }
@@ -1797,6 +1833,136 @@ if (location.search.includes('debug')) $('dbg-panel').style.display = 'block';
 $('uz-btn').addEventListener('click', () => { dbg('uz-btn tapped'); }, true);
 
 updateBkBadge(); ready();
+
+// ── Google Drive 연동 ──
+let gisLoading = false;
+let gisReady = false;
+let driveTokenClient = null;
+let driveToken = null;
+
+function loadGIS() {
+  if (gisReady) return Promise.resolve();
+  if (gisLoading) return new Promise(resolve => {
+    const t = setInterval(() => { if (gisReady) { clearInterval(t); resolve(); } }, 100);
+  });
+  gisLoading = true;
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://accounts.google.com/gsi/client';
+    s.onload = () => { gisReady = true; gisLoading = false; resolve(); };
+    s.onerror = () => { gisLoading = false; reject(new Error('Google 라이브러리 로드 실패')); };
+    document.head.appendChild(s);
+  });
+}
+
+async function openGoogleDrivePicker() {
+  const clientId = $('gdrive-client-id').value.trim();
+  if (!clientId) { toast('⚠ OAuth Client ID를 입력해주세요'); $('gdrive-client-id').focus(); return; }
+
+  const btn = $('gdrive-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Google 로그인 중...';
+  try {
+    await loadGIS();
+
+    if (!driveToken) {
+      await new Promise((resolve, reject) => {
+        driveTokenClient = google.accounts.oauth2.initTokenClient({
+          client_id: clientId,
+          scope: 'https://www.googleapis.com/auth/drive.readonly',
+          callback: (resp) => {
+            if (resp.error) reject(new Error(resp.error_description || resp.error));
+            else { driveToken = resp.access_token; resolve(); }
+          }
+        });
+        driveTokenClient.requestAccessToken();
+      });
+    }
+
+    btn.textContent = '⏳ 파일 목록 로드 중...';
+    const q = encodeURIComponent("name contains '.ipynb' and trashed=false");
+    const res = await fetch(
+      `https://www.googleapis.com/drive/v3/files?q=${q}&orderBy=modifiedTime%20desc&pageSize=50&fields=files(id,name,modifiedTime)`,
+      { headers: { Authorization: 'Bearer ' + driveToken } }
+    );
+    if (!res.ok) {
+      if (res.status === 401) driveToken = null;
+      throw new Error('Drive API HTTP ' + res.status);
+    }
+    const data = await res.json();
+    showGDriveModal(data.files || []);
+  } catch(e) {
+    toast('⚠ ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🔵 Google Drive에서 열기';
+  }
+}
+
+function showGDriveModal(driveFiles) {
+  const m = $('gdrive-modal');
+  const list = $('gdrive-file-list');
+  list.innerHTML = '';
+  if (!driveFiles.length) {
+    list.innerHTML = '<div style="padding:24px;text-align:center;color:#888;font-size:13px">Drive에 .ipynb 파일이 없습니다</div>';
+  } else {
+    driveFiles.forEach(f => {
+      const d = document.createElement('div');
+      d.style.cssText = 'padding:10px 14px;border-bottom:1px solid #f0f0f0;cursor:pointer;display:flex;align-items:center;gap:10px;transition:background .1s';
+      d.innerHTML = `<span style="font-size:16px;flex-shrink:0">📓</span><div style="flex:1;overflow:hidden"><div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#111">${escH(f.name)}</div><div style="font-size:11px;color:#888;margin-top:1px">${new Date(f.modifiedTime).toLocaleString('ko-KR',{dateStyle:'short',timeStyle:'short'})}</div></div><span style="font-size:14px;color:#bbb;flex-shrink:0">›</span>`;
+      d.addEventListener('mouseenter', () => { d.style.background = '#f5f5f5'; });
+      d.addEventListener('mouseleave', () => { d.style.background = ''; });
+      d.addEventListener('click', () => { closeGDriveModal(); loadFromGDrive(f.id, f.name); });
+      list.appendChild(d);
+    });
+  }
+  m.style.display = 'flex';
+  m.style.alignItems = 'center';
+  m.style.justifyContent = 'center';
+}
+
+function closeGDriveModal() { $('gdrive-modal').style.display = 'none'; }
+
+async function loadFromGDrive(fileId, fileName) {
+  try {
+    toast('⏳ ' + fileName + ' 다운로드 중...');
+    const res = await fetch(
+      'https://www.googleapis.com/drive/v3/files/' + fileId + '?alt=media',
+      { headers: { Authorization: 'Bearer ' + driveToken } }
+    );
+    if (!res.ok) {
+      if (res.status === 401) driveToken = null;
+      throw new Error('HTTP ' + res.status);
+    }
+    const text = await res.text();
+    const nb = JSON.parse(text);
+    if (!nb.cells) throw new Error('유효한 .ipynb 형식이 아닙니다');
+    const strippedCells = nb.cells.map((c, i) => ({
+      idx: i, type: c.cell_type,
+      src: c.cell_type === 'code'
+        ? stripComments(Array.isArray(c.source) ? c.source.join('') : (c.source || ''))
+        : (Array.isArray(c.source) ? c.source.join('') : (c.source || ''))
+    }));
+    const displayName = fileName.endsWith('.ipynb') ? fileName : fileName + '.ipynb';
+    files[displayName] = { nb, strippedCells };
+    if (!activeFile) activeFile = displayName;
+    renderFList(); ready();
+    toast('✓ ' + displayName + ' 로드됨 (' + nb.cells.length + '개 셀)');
+    if (activeFile === displayName) showFileQuiz(displayName);
+  } catch(e) {
+    toast('⚠ Drive 파일 로드 실패: ' + e.message);
+  }
+}
+
+// Client ID localStorage 저장/불러오기
+const savedGClientId = localStorage.getItem('nbq_gClientId');
+if (savedGClientId) $('gdrive-client-id').value = savedGClientId;
+$('gdrive-client-id').addEventListener('input', () => {
+  localStorage.setItem('nbq_gClientId', $('gdrive-client-id').value.trim());
+});
+$('gdrive-btn').addEventListener('click', openGoogleDrivePicker);
+$('gdrive-close').addEventListener('click', closeGDriveModal);
+$('gdrive-modal').addEventListener('click', e => { if (e.target === $('gdrive-modal')) closeGDriveModal(); });
 </script>
 </body>
 </html>
