@@ -400,11 +400,11 @@ body.modal-open { overflow:hidden; }
     <div id="med-hard-opts">
       <div class="selrow">
         <select id="n-per-block">
-          <option value="1">블락당 1줄</option>
-          <option value="2" selected>블락당 2줄</option>
-          <option value="3">블락당 3줄</option>
-          <option value="4">블락당 4줄</option>
-          <option value="5">블락당 5줄</option>
+          <option value="1">셀당 1줄</option>
+          <option value="2" selected>셀당 2줄</option>
+          <option value="3">셀당 3줄</option>
+          <option value="4">셀당 4줄</option>
+          <option value="5">셀당 5줄</option>
         </select>
         <button class="toggle-btn" id="consec-btn" style="margin:0">
           <span class="toggle-dot"></span>
@@ -1500,7 +1500,7 @@ function renderQuiz(strippedCells, blanks) {
   const bNums = {};
   blanks.forEach(b => { bNums[b.cell_idx+'::'+b.original_line] = gNum++; });
 
-  // 방어 로직: 블락당 실제 줄 수 초과하지 않도록
+  // 방어 로직: 셀당 실제 줄 수 초과하지 않도록
   Object.keys(bmap).forEach(cidx => {
     const cell = strippedCells.find(c => c.idx === parseInt(cidx));
     if (!cell) return;
