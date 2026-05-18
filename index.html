@@ -523,39 +523,40 @@ body.modal-open { overflow:hidden; }
 const $ = id => document.getElementById(id);
 
 // ── IndexedDB (파일 영구 저장) ──
-const DBNAME = 'nbquiz_db', DBVER = 1, STORE = 'notebooks';
+const DBNAME = 'nbquiz_db', DBVER = 2, STORE_NB = 'notebooks', STORE_POOL = 'pools';
 function openDB() {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DBNAME, DBVER);
-    req.onupgradeneeded = () => { req.result.createObjectStore(STORE); };
+    req.onupgradeneeded = (e) => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(STORE_NB)) db.createObjectStore(STORE_NB);
+      if (!db.objectStoreNames.contains(STORE_POOL)) db.createObjectStore(STORE_POOL);
+    };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
   });
 }
-async function dbSave(name, nb) {
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE, 'readwrite');
-    tx.objectStore(STORE).put(nb, name);
+function dbPut(store, key, value) {
+  return openDB().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction(store, 'readwrite');
+    tx.objectStore(store).put(value, key);
     tx.oncomplete = () => { db.close(); resolve(); };
     tx.onerror = () => { db.close(); reject(tx.error); };
-  });
+  }));
 }
-async function dbDelete(name) {
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE, 'readwrite');
-    tx.objectStore(STORE).delete(name);
+function dbDel(store, key) {
+  return openDB().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction(store, 'readwrite');
+    tx.objectStore(store).delete(key);
     tx.oncomplete = () => { db.close(); resolve(); };
     tx.onerror = () => { db.close(); reject(tx.error); };
-  });
+  }));
 }
-async function dbLoadAll() {
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE, 'readonly');
-    const store = tx.objectStore(STORE);
-    const req = store.openCursor();
+function dbGetAll(store) {
+  return openDB().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction(store, 'readonly');
+    const s = tx.objectStore(store);
+    const req = s.openCursor();
     const result = {};
     req.onsuccess = () => {
       const cursor = req.result;
@@ -563,8 +564,14 @@ async function dbLoadAll() {
       else { db.close(); resolve(result); }
     };
     req.onerror = () => { db.close(); reject(req.error); };
-  });
+  }));
 }
+// 편의 함수
+function dbSave(name, nb) { return dbPut(STORE_NB, name, nb); }
+function dbDelete(name) { return Promise.all([dbDel(STORE_NB, name), dbDel(STORE_POOL, name)]); }
+function dbSavePool(name, poolData) { return dbPut(STORE_POOL, name, poolData); }
+function dbLoadAll() { return dbGetAll(STORE_NB); }
+function dbLoadPools() { return dbGetAll(STORE_POOL); }
 
 // ── state ──
 const files = {};             // name → { nb, strippedCells }
@@ -1390,6 +1397,7 @@ async function generateForFile(name, isRegen) {
       const raw1 = d1.content[0].text.trim().replace(/```json|```/g,'').trim();
       const poolItems = JSON.parse(raw1).pool;
       linePool[name] = { pool: poolItems, generated: true };
+      dbSavePool(name, { pool: poolItems, generated: true }).catch(e => dbg('dbSavePool error: ' + e.message));
       lineHistory[name] = new Set();
     }
 
@@ -1914,10 +1922,10 @@ dzone.addEventListener('click', () => { dbg('dzone tapped'); });
 
 updateBkBadge(); ready();
 
-// ── IndexedDB에서 파일 복원 ──
-dbLoadAll().then(saved => {
+// ── IndexedDB에서 파일 + pool 복원 ──
+Promise.all([dbLoadAll(), dbLoadPools()]).then(([savedFiles, savedPools]) => {
   let count = 0;
-  Object.entries(saved).forEach(([name, nb]) => {
+  Object.entries(savedFiles).forEach(([name, nb]) => {
     if (!nb.cells) return;
     const strippedCells = nb.cells.map((c, i) => ({
       idx: i, type: c.cell_type,
@@ -1928,12 +1936,17 @@ dbLoadAll().then(saved => {
     files[name] = { nb, strippedCells };
     count++;
   });
+  // pool 복원 — Phase 1 API 호출 생략 가능
+  let poolCount = 0;
+  Object.entries(savedPools).forEach(([name, poolData]) => {
+    if (files[name] && poolData.pool) { linePool[name] = poolData; poolCount++; }
+  });
   if (count) {
     if (!activeFile) activeFile = Object.keys(files)[0];
     renderFList(); ready();
-    toast('✓ ' + count + '개 파일 복원됨');
+    toast('✓ ' + count + '개 파일 복원됨' + (poolCount ? ' (pool ' + poolCount + '개 캐시)' : ''));
   }
-}).catch(e => dbg('dbLoadAll error: ' + e.message));
+}).catch(e => dbg('dbLoad error: ' + e.message));
 
 // ── Google Drive 연동 ──
 let gisLoading = false;
