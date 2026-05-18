@@ -427,36 +427,6 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text); min-hei
         autocomplete="off"/>
       <div class="gdrive-sub">Google Cloud Console에서 OAuth 2.0 클라이언트 ID 생성 필요<br>※ http://localhost 에서 실행해야 동작</div>
     </div>
-    <!-- Google Drive 파일 목록 모달 -->
-    <div id="gdrive-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:500;padding:20px;align-items:center;justify-content:center">
-      <div style="background:#fff;border-radius:8px;width:100%;max-width:480px;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.18)">
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid #eee">
-          <span style="font-size:14px;font-weight:600;color:#111">🔵 Google Drive 파일 선택</span>
-          <button id="gdrive-close" style="background:none;border:none;font-size:18px;cursor:pointer;color:#888;line-height:1">✕</button>
-        </div>
-        <div id="gdrive-file-list" style="flex:1;overflow-y:auto"></div>
-      </div>
-    </div>
-    <!-- paste 모달 -->
-    <div id="paste-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:500;padding:20px;align-items:center;justify-content:center">
-      <div style="background:#fff;border-radius:8px;padding:16px;width:100%;max-width:560px;max-height:80vh;display:flex;flex-direction:column;gap:10px">
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <span style="font-size:14px;font-weight:600;color:#111">📋 노트북 내용 붙여넣기</span>
-          <button id="paste-close" style="background:none;border:none;font-size:18px;cursor:pointer;color:#888">✕</button>
-        </div>
-        <div style="font-size:12px;color:#555;line-height:1.6">
-          맥북 터미널에서: <code style="background:#f0f0f0;padding:1px 5px;border-radius:2px;font-family:monospace">cat 파일명.ipynb | pbcopy</code><br>
-          또는 파일을 텍스트 에디터로 열고 전체 선택(⌘A) → 복사(⌘C)
-        </div>
-        <input id="paste-name" type="text" placeholder="파일 이름 (예: chapter1.ipynb)"
-          style="border:1px solid #ddd;border-radius:4px;padding:7px 10px;font-size:13px;outline:none"/>
-        <textarea id="paste-content" placeholder=".ipynb 파일 내용을 여기에 붙여넣으세요 (⌘V 또는 길게 눌러 붙여넣기)..."
-          style="flex:1;min-height:200px;border:1px solid #ddd;border-radius:4px;padding:10px;font-family:monospace;font-size:11px;resize:none;outline:none;line-height:1.5"></textarea>
-        <button id="paste-confirm" style="background:#1565c0;color:#fff;border:none;border-radius:4px;padding:10px;font-size:14px;font-weight:600;cursor:pointer">
-          ✓ 추가하기
-        </button>
-      </div>
-    </div>
     <div id="flist"></div>
   </div>
   <div class="sb-footer">
@@ -499,6 +469,38 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text); min-hei
 </main>
 </div>
 <div class="toast" id="toast"></div>
+
+<!-- Google Drive 파일 목록 모달 -->
+<div id="gdrive-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;padding:20px;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:8px;width:100%;max-width:480px;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.18)">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid #eee">
+      <span style="font-size:14px;font-weight:600;color:#111">🔵 Google Drive 파일 선택</span>
+      <button id="gdrive-close" style="background:none;border:none;font-size:18px;cursor:pointer;color:#888;line-height:1">✕</button>
+    </div>
+    <div id="gdrive-file-list" style="flex:1;overflow-y:auto"></div>
+  </div>
+</div>
+
+<!-- paste 모달 -->
+<div id="paste-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;padding:20px;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:8px;padding:16px;width:100%;max-width:560px;max-height:80vh;display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <span style="font-size:14px;font-weight:600;color:#111">📋 노트북 내용 붙여넣기</span>
+      <button id="paste-close" style="background:none;border:none;font-size:18px;cursor:pointer;color:#888">✕</button>
+    </div>
+    <div style="font-size:12px;color:#555;line-height:1.6">
+      맥북 터미널에서: <code style="background:#f0f0f0;padding:1px 5px;border-radius:2px;font-family:monospace">cat 파일명.ipynb | pbcopy</code><br>
+      또는 파일을 텍스트 에디터로 열고 전체 선택(⌘A) → 복사(⌘C)
+    </div>
+    <input id="paste-name" type="text" placeholder="파일 이름 (예: chapter1.ipynb)"
+      style="border:1px solid #ddd;border-radius:4px;padding:7px 10px;font-size:13px;outline:none"/>
+    <textarea id="paste-content" placeholder=".ipynb 파일 내용을 여기에 붙여넣으세요 (⌘V 또는 길게 눌러 붙여넣기)..."
+      style="flex:1;min-height:200px;border:1px solid #ddd;border-radius:4px;padding:10px;font-family:monospace;font-size:11px;resize:none;outline:none;line-height:1.5"></textarea>
+    <button id="paste-confirm" style="background:#1565c0;color:#fff;border:none;border-radius:4px;padding:10px;font-size:14px;font-weight:600;cursor:pointer">
+      ✓ 추가하기
+    </button>
+  </div>
+</div>
 <!-- debug panel — toggle with 5-finger tap or ?debug in URL -->
 <div id="dbg-panel" style="display:none;position:fixed;bottom:0;left:0;right:0;max-height:40vh;overflow-y:auto;background:rgba(0,0,0,0.92);color:#0f0;font-family:monospace;font-size:11px;padding:8px;z-index:9999;border-top:2px solid #0f0">
   <div style="display:flex;justify-content:space-between;margin-bottom:4px">
