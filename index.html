@@ -408,7 +408,7 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text); min-hei
       <div class="paste-sub">맥북에서 .ipynb 내용 복사 후</div>
     </div>
     <!-- paste 모달 -->
-    <div id="paste-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:500;display:none;align-items:center;justify-content:center;padding:20px">
+    <div id="paste-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:500;padding:20px;align-items:center;justify-content:center">
       <div style="background:#fff;border-radius:8px;padding:16px;width:100%;max-width:560px;max-height:80vh;display:flex;flex-direction:column;gap:10px">
         <div style="display:flex;justify-content:space-between;align-items:center">
           <span style="font-size:14px;font-weight:600;color:#111">📋 노트북 내용 붙여넣기</span>
@@ -773,11 +773,13 @@ dzone.addEventListener('drop', e => { e.preventDefault(); dzone.style.borderColo
 // ── 붙여넣기 모달 (iOS 파일 피커 우회) ──
 function openPasteModal() {
   const m = $('paste-modal');
-  m.style.display = 'flex';
-  setTimeout(() => $('paste-content').focus(), 100);
+  m.style.setProperty('display', 'flex', 'important');
+  m.style.alignItems = 'center';
+  m.style.justifyContent = 'center';
+  setTimeout(() => { try { $('paste-content').focus(); } catch(e){} }, 100);
 }
 function closePasteModal() {
-  $('paste-modal').style.display = 'none';
+  $('paste-modal').style.setProperty('display', 'none', 'important');
   $('paste-content').value = '';
   $('paste-name').value = '';
 }
