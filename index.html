@@ -1423,8 +1423,7 @@ function renderQuiz(strippedCells, blanks) {
   Object.keys(bmap).forEach(cidx => {
     const cell = strippedCells.find(c => c.idx === parseInt(cidx));
     if (!cell) return;
-    const codeLines = cell.src.split('
-').filter(l => l.trim()).length;
+    const codeLines = cell.src.split('\n').filter(l => l.trim()).length;
     const maxBlanks = Math.min(bmap[cidx].length, Math.max(1, Math.min(5, codeLines)));
     bmap[cidx] = bmap[cidx].slice(0, maxBlanks);
   });
@@ -1463,8 +1462,7 @@ function renderQuiz(strippedCells, blanks) {
       if (hasBlank) {
         const blankSet = new Map();
         bmap[cell.idx].forEach(b => blankSet.set(b.original_line, b));
-        const lines = cell.src.split('
-');
+        const lines = cell.src.split('\n');
         lines.forEach((line, li) => {
           const match = blankSet.get(line);
           if (match) {
