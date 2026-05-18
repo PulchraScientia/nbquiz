@@ -138,6 +138,13 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text); min-hei
   margin-top:4px; display:block;
 }
 .gdrive-client-input:focus { border-color:#1a73e8 }
+/* iOS scroll 컨테이너 안 버튼: 탭 즉시 인식 */
+.paste-btn, .gdrive-btn { touch-action:manipulation; -webkit-tap-highlight-color:transparent; }
+/* 모달 visibility: inline style 직접 조작 대신 class 토글 (iOS Safari에서 더 안정적) */
+#paste-modal, #gdrive-modal { display:none; align-items:center; justify-content:center; }
+#paste-modal.visible, #gdrive-modal.visible { display:flex; }
+/* 모달 열릴 때 body 스크롤 잠금 */
+body.modal-open { overflow:hidden; }
 .fi {
   display:flex; align-items:center; gap:6px; padding:7px 8px;
   border-radius:var(--rs); cursor:pointer; border:1px solid transparent;
@@ -471,7 +478,7 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text); min-hei
 <div class="toast" id="toast"></div>
 
 <!-- Google Drive 파일 목록 모달 -->
-<div id="gdrive-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;padding:20px;align-items:center;justify-content:center">
+<div id="gdrive-modal" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:1000;padding:20px">
   <div style="background:#fff;border-radius:8px;width:100%;max-width:480px;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.18)">
     <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid #eee">
       <span style="font-size:14px;font-weight:600;color:#111">🔵 Google Drive 파일 선택</span>
@@ -482,7 +489,7 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text); min-hei
 </div>
 
 <!-- paste 모달 -->
-<div id="paste-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;padding:20px;align-items:center;justify-content:center">
+<div id="paste-modal" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:1000;padding:20px">
   <div style="background:#fff;border-radius:8px;padding:16px;width:100%;max-width:560px;max-height:80vh;display:flex;flex-direction:column;gap:10px">
     <div style="display:flex;justify-content:space-between;align-items:center">
       <span style="font-size:14px;font-weight:600;color:#111">📋 노트북 내용 붙여넣기</span>
@@ -803,14 +810,12 @@ dzone.addEventListener('drop', e => { e.preventDefault(); dzone.style.borderColo
 
 // ── 붙여넣기 모달 (iOS 파일 피커 우회) ──
 function openPasteModal() {
-  const m = $('paste-modal');
-  m.style.display = 'flex';
-  m.style.alignItems = 'center';
-  m.style.justifyContent = 'center';
-  setTimeout(() => { try { $('paste-name').focus(); } catch(e){} }, 100);
+  $('paste-modal').classList.add('visible');
+  document.body.classList.add('modal-open');
 }
 function closePasteModal() {
-  $('paste-modal').style.display = 'none';
+  $('paste-modal').classList.remove('visible');
+  document.body.classList.remove('modal-open');
   $('paste-content').value = '';
   $('paste-name').value = '';
 }
@@ -1851,48 +1856,52 @@ function loadGIS() {
   });
 }
 
-async function openGoogleDrivePicker() {
+// GIS는 비동기로 미리 로드 — 버튼 클릭 시 requestAccessToken()을 user gesture 안에서 동기 호출하기 위해
+window.addEventListener('load', () => { setTimeout(() => loadGIS().catch(()=>{}), 1000); });
+
+async function fetchDriveFiles(token) {
+  const q = encodeURIComponent("name contains '.ipynb' and trashed=false");
+  const res = await fetch(
+    `https://www.googleapis.com/drive/v3/files?q=${q}&orderBy=modifiedTime%20desc&pageSize=50&fields=files(id,name,modifiedTime)`,
+    { headers: { Authorization: 'Bearer ' + token } }
+  );
+  if (!res.ok) { if (res.status === 401) driveToken = null; throw new Error('Drive API HTTP ' + res.status); }
+  const data = await res.json();
+  return data.files || [];
+}
+
+// async 없이 동기 함수 — iOS에서 requestAccessToken() popup이 user gesture로 허용되도록
+function openGoogleDrivePicker() {
   const clientId = $('gdrive-client-id').value.trim();
   if (!clientId) { toast('⚠ OAuth Client ID를 입력해주세요'); $('gdrive-client-id').focus(); return; }
 
-  const btn = $('gdrive-btn');
-  btn.disabled = true;
-  btn.textContent = '⏳ Google 로그인 중...';
-  try {
-    await loadGIS();
-
-    if (!driveToken) {
-      await new Promise((resolve, reject) => {
-        driveTokenClient = google.accounts.oauth2.initTokenClient({
-          client_id: clientId,
-          scope: 'https://www.googleapis.com/auth/drive.readonly',
-          callback: (resp) => {
-            if (resp.error) reject(new Error(resp.error_description || resp.error));
-            else { driveToken = resp.access_token; resolve(); }
-          }
-        });
-        driveTokenClient.requestAccessToken();
-      });
-    }
-
-    btn.textContent = '⏳ 파일 목록 로드 중...';
-    const q = encodeURIComponent("name contains '.ipynb' and trashed=false");
-    const res = await fetch(
-      `https://www.googleapis.com/drive/v3/files?q=${q}&orderBy=modifiedTime%20desc&pageSize=50&fields=files(id,name,modifiedTime)`,
-      { headers: { Authorization: 'Bearer ' + driveToken } }
-    );
-    if (!res.ok) {
-      if (res.status === 401) driveToken = null;
-      throw new Error('Drive API HTTP ' + res.status);
-    }
-    const data = await res.json();
-    showGDriveModal(data.files || []);
-  } catch(e) {
-    toast('⚠ ' + e.message);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = '🔵 Google Drive에서 열기';
+  if (!gisReady) {
+    toast('⏳ Google 라이브러리 로딩 중... 잠시 후 다시 시도');
+    loadGIS().then(() => toast('✓ 준비됨, 버튼을 다시 눌러주세요')).catch(e => toast('⚠ ' + e.message));
+    return;
   }
+
+  const btn = $('gdrive-btn');
+  const resetBtn = () => { btn.disabled = false; btn.textContent = '🔵 Google Drive에서 열기'; };
+
+  if (driveToken) {
+    btn.disabled = true; btn.textContent = '⏳ 파일 목록 로드 중...';
+    fetchDriveFiles(driveToken).then(showGDriveModal).catch(e => toast('⚠ ' + e.message)).finally(resetBtn);
+    return;
+  }
+
+  // requestAccessToken() 반드시 동기적으로 호출 (iOS popup 허용)
+  driveTokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: clientId,
+    scope: 'https://www.googleapis.com/auth/drive.readonly',
+    callback: (resp) => {
+      if (resp.error) { toast('⚠ ' + (resp.error_description || resp.error)); resetBtn(); return; }
+      driveToken = resp.access_token;
+      btn.disabled = true; btn.textContent = '⏳ 파일 목록 로드 중...';
+      fetchDriveFiles(driveToken).then(showGDriveModal).catch(e => toast('⚠ ' + e.message)).finally(resetBtn);
+    }
+  });
+  driveTokenClient.requestAccessToken(); // user gesture 안에서 동기 호출
 }
 
 function showGDriveModal(driveFiles) {
@@ -1912,12 +1921,14 @@ function showGDriveModal(driveFiles) {
       list.appendChild(d);
     });
   }
-  m.style.display = 'flex';
-  m.style.alignItems = 'center';
-  m.style.justifyContent = 'center';
+  $('gdrive-modal').classList.add('visible');
+  document.body.classList.add('modal-open');
 }
 
-function closeGDriveModal() { $('gdrive-modal').style.display = 'none'; }
+function closeGDriveModal() {
+  $('gdrive-modal').classList.remove('visible');
+  document.body.classList.remove('modal-open');
+}
 
 async function loadFromGDrive(fileId, fileName) {
   try {
