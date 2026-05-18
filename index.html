@@ -462,6 +462,7 @@ body.modal-open { overflow:hidden; }
         <button class="btn" id="reveal-btn">💡 정답</button>
         <button class="btn" id="regen-btn">🔄 다시 뽑기</button>
         <button class="btn" id="reset-btn">↩ 초기화</button>
+        <button class="btn danger" id="file-reset-btn">🗑 설정 변경</button>
       </div>
     </div>
     <div id="cells"></div>
@@ -520,6 +521,50 @@ body.modal-open { overflow:hidden; }
 <script src="https://cdn.jsdelivr.net/pyodide/v0.25.1/full/pyodide.js"></script>
 <script>
 const $ = id => document.getElementById(id);
+
+// ── IndexedDB (파일 영구 저장) ──
+const DBNAME = 'nbquiz_db', DBVER = 1, STORE = 'notebooks';
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DBNAME, DBVER);
+    req.onupgradeneeded = () => { req.result.createObjectStore(STORE); };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function dbSave(name, nb) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readwrite');
+    tx.objectStore(STORE).put(nb, name);
+    tx.oncomplete = () => { db.close(); resolve(); };
+    tx.onerror = () => { db.close(); reject(tx.error); };
+  });
+}
+async function dbDelete(name) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readwrite');
+    tx.objectStore(STORE).delete(name);
+    tx.oncomplete = () => { db.close(); resolve(); };
+    tx.onerror = () => { db.close(); reject(tx.error); };
+  });
+}
+async function dbLoadAll() {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readonly');
+    const store = tx.objectStore(STORE);
+    const req = store.openCursor();
+    const result = {};
+    req.onsuccess = () => {
+      const cursor = req.result;
+      if (cursor) { result[cursor.key] = cursor.value; cursor.continue(); }
+      else { db.close(); resolve(result); }
+    };
+    req.onerror = () => { db.close(); reject(req.error); };
+  });
+}
 
 // ── state ──
 const files = {};             // name → { nb, strippedCells }
@@ -838,6 +883,7 @@ $('paste-confirm').addEventListener('click', () => {
         : (Array.isArray(c.source) ? c.source.join('') : (c.source || ''))
     }));
     files[name] = { nb, strippedCells };
+    dbSave(name, nb).catch(e => dbg('dbSave error: ' + e.message));
     if (!activeFile) activeFile = name;
     renderFList(); ready();
     toast('✓ ' + name + ' 로드됨 (' + nb.cells.length + '개 셀)');
@@ -877,6 +923,7 @@ function loadFiles(list) {
         // 표시용 이름: 빈 문자열이면 'notebook.ipynb' 로 대체
         const displayName = f.name || ('notebook_' + Date.now() + '.ipynb');
         files[displayName] = { nb, strippedCells };
+        dbSave(displayName, nb).catch(e => dbg('dbSave error: ' + e.message));
         if (!activeFile) activeFile = displayName;
         renderFList(); ready();
         toast('✓ ' + displayName + ' 로드됨 (' + nb.cells.length + '개 셀)');
@@ -917,7 +964,8 @@ function renderFList() {
     d.querySelector('.fi-del').addEventListener('click', e => {
       e.stopPropagation();
       generatingFiles.delete(name);
-      delete files[name]; delete quizCache[name];
+      delete files[name]; delete quizCache[name]; delete linePool[name]; delete lineHistory[name];
+      dbDelete(name).catch(e => dbg('dbDelete error: ' + e.message));
       activeFile = Object.keys(files)[0] || null;
       renderFList(); ready();
       if (activeFile) showFileQuiz(activeFile);
@@ -1183,30 +1231,44 @@ function sampleFromPool(name, nPerBlock, diff, consecutive) {
     [shuffledCells[i],shuffledCells[j]] = [shuffledCells[j],shuffledCells[i]];
   }
 
+  // 각 코드 셀마다 nPerBlock줄 선택 (연속: 셀 내 연속된 줄, 분산: 셀 내 흩어진 줄)
   const selected = [];
+
   for (const ck of shuffledCells) {
-    if (selected.length >= nPerBlock) break;
     const cellLines = byCellMap[ck].slice();
-    // Fisher-Yates shuffle (줄 순서)
-    for (let i=cellLines.length-1;i>0;i--){
-      const j=Math.floor(Math.random()*(i+1));
-      [cellLines[i],cellLines[j]]=[cellLines[j],cellLines[i]];
-    }
-    const needed = Math.min(nPerBlock - selected.length, consecutive ? cellLines.length : 1);
-    // 연속 모드: 원본 코드에서 연속된 줄 우선
-    if (consecutive && cellLines.length >= 2) {
+    if (!cellLines.length) continue;
+    const want = Math.min(nPerBlock, cellLines.length);
+
+    if (consecutive) {
+      // 연속 모드: 원본 코드에서 연속된 줄 묶음 우선
       const src = files[activeFile]?.strippedCells?.find(c=>c.idx===parseInt(ck))?.src || '';
       const srcLines = src.split('\n');
-      // 선택된 줄들 중 연속 묶음 찾기
-      const idxInSrc = cellLines.map(p => srcLines.indexOf(p.line)).filter(i=>i>=0).sort((a,b)=>a-b);
-      let bestStart = 0;
-      for (let i=0; i<idxInSrc.length-1; i++) {
-        if (idxInSrc[i+1]-idxInSrc[i]===1) { bestStart=i; break; }
+      // 각 후보의 원본 줄 번호
+      const withIdx = cellLines.map(p => ({ p, srcIdx: srcLines.indexOf(p.line) })).filter(x => x.srcIdx >= 0);
+      withIdx.sort((a,b) => a.srcIdx - b.srcIdx);
+      // 가장 긴 연속 묶음 찾기
+      let bestStart = 0, bestLen = 1;
+      for (let i = 0; i < withIdx.length; i++) {
+        let len = 1;
+        while (i+len < withIdx.length && withIdx[i+len].srcIdx - withIdx[i+len-1].srcIdx === 1) len++;
+        if (len > bestLen) { bestLen = len; bestStart = i; }
       }
-      const pick = cellLines.slice(bestStart, bestStart+needed);
+      const pick = withIdx.slice(bestStart, bestStart + Math.min(want, bestLen)).map(x => x.p);
+      // 연속 묶음이 부족하면 나머지에서 랜덤 추가
+      if (pick.length < want) {
+        const pickSet = new Set(pick);
+        const rest = cellLines.filter(p => !pickSet.has(p));
+        for (let i=rest.length-1;i>0;i--) { const j=Math.floor(Math.random()*(i+1)); [rest[i],rest[j]]=[rest[j],rest[i]]; }
+        pick.push(...rest.slice(0, want - pick.length));
+      }
       selected.push(...pick);
     } else {
-      selected.push(...cellLines.slice(0, needed));
+      // 분산 모드: 셀 내에서 랜덤 셔플 후 선택
+      for (let i=cellLines.length-1;i>0;i--) {
+        const j=Math.floor(Math.random()*(i+1));
+        [cellLines[i],cellLines[j]]=[cellLines[j],cellLines[i]];
+      }
+      selected.push(...cellLines.slice(0, want));
     }
   }
 
@@ -1242,23 +1304,26 @@ async function generateForFile(name, isRegen) {
       // Phase 1: 로컬 샘플링
       const easyBlanks = buildEasyBlanks(files[name].strippedCells, pct, maxTok);
       if (!easyBlanks.length) throw new Error('출제 가능한 토큰이 없어요.');
-      prog(50, 'reason/hint 생성 중...');
-      // Phase 2: reason+hint만 Claude 요청 (작은 프롬프트)
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method:'POST',
-        headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-        body: JSON.stringify({model:'claude-sonnet-4-6',max_tokens:4096,
-          messages:[{role:'user',content:buildEasyAnnotatePrompt(easyBlanks)}]})
-      });
-      if (!res.ok) { const e=await res.json().catch(()=>({})); throw new Error(e.error?.message||'HTTP '+res.status); }
-      const d = await res.json();
-      const raw = d.content[0].text.trim().replace(/```json|```/g,'').trim();
-      try {
-        const anns = JSON.parse(raw).annotations;
-        anns.forEach(a => { if (easyBlanks[a.idx-1]) { easyBlanks[a.idx-1].reason=a.reason||''; easyBlanks[a.idx-1].hint=a.hint||null; } });
-      } catch(pe) {
-        // 응답이 잘려서 JSON 파싱 실패 시 — reason/hint 없이 진행
-        dbg('easy annotate JSON parse failed: ' + pe.message);
+      // Phase 2: reason/hint Claude 요청 (빈칸 25개 이하일 때만, 실패해도 퀴즈 생성은 계속)
+      if (easyBlanks.length <= 25) {
+        prog(50, 'reason/hint 생성 중...');
+        try {
+          const res = await fetch('https://api.anthropic.com/v1/messages', {
+            method:'POST',
+            headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+            body: JSON.stringify({model:'claude-sonnet-4-6',max_tokens:4096,
+              messages:[{role:'user',content:buildEasyAnnotatePrompt(easyBlanks)}]})
+          });
+          if (res.ok) {
+            const d = await res.json();
+            const raw = d.content[0].text.trim().replace(/```json|```/g,'').trim();
+            const anns = JSON.parse(raw).annotations;
+            anns.forEach(a => { if (easyBlanks[a.idx-1]) { easyBlanks[a.idx-1].reason=a.reason||''; easyBlanks[a.idx-1].hint=a.hint||null; } });
+          }
+        } catch(pe) { dbg('easy annotate skipped: ' + pe.message); }
+      } else {
+        prog(50, '빈칸이 많아 hint 생략...');
+        dbg('easy: ' + easyBlanks.length + ' blanks, skipping annotation');
       }
       quizCache[name] = { blanks: easyBlanks, mode: 'easy' };
       generatingFiles.delete(name); renderFList(); ready();
@@ -1395,11 +1460,11 @@ async function generateForFile(name, isRegen) {
 function prog(p, msg) { $('load-fill').style.width=p+'%'; $('load-txt').textContent=msg; }
 
 $('reset-all-btn').addEventListener('click', () => {
-  if (!confirm('모든 파일의 퀴즈를 초기화할까요?\n(출제 pool도 함께 초기화됩니다)')) return;
+  if (!confirm('모든 파일의 퀴즈를 초기화할까요?\n(출제 pool 캐시는 유지됩니다)')) return;
   Object.keys(quizCache).forEach(k => delete quizCache[k]);
-  Object.keys(linePool).forEach(k => delete linePool[k]);
   Object.keys(lineHistory).forEach(k => delete lineHistory[k]);
-  renderFList(); hideQuiz(); toast('모든 퀴즈 초기화됨');
+  // linePool 유지 — Claude pool 캐시 보존 (재생성 시 API 호출 절약)
+  renderFList(); hideQuiz(); toast('모든 퀴즈 초기화됨 (pool 캐시 유지)');
 });
 
 // ── renderQuiz ──
@@ -1482,7 +1547,7 @@ function renderQuiz(strippedCells, blanks) {
             const bNum = bNums[cell.idx+'::'+line]; field.dataset.num = bNum;
             const tag = document.createElement('span'); tag.className='bl-tag t-idx'; tag.textContent=bNum;
             const inp = document.createElement('input'); inp.type='text'; inp.className='bl-input';
-            inp.placeholder = match.hint || '내용을 입력하세요...';
+            inp.placeholder = (showReasons && match.hint) ? match.hint : '코드를 입력하세요...';
             inp.setAttribute('spellcheck','false'); inp.setAttribute('autocorrect','off'); inp.setAttribute('autocapitalize','off');
             inp.addEventListener('keydown', e => {
               if (e.key==='Enter'){e.preventDefault();checkField(field,inp);}
@@ -1690,6 +1755,14 @@ $('reveal-btn').addEventListener('click', () => {
   });
   updateScore();
 });
+$('file-reset-btn').addEventListener('click', () => {
+  if (!activeFile) return;
+  delete quizCache[activeFile];
+  delete lineHistory[activeFile];
+  // linePool[activeFile]은 유지 (Claude pool 캐시 보존)
+  renderFList(); hideQuiz(); ready();
+  toast('✓ ' + activeFile + ' 퀴즈 초기화됨 — 설정 변경 후 다시 생성하세요');
+});
 $('reset-btn').addEventListener('click', () => {
   document.querySelectorAll('.bl-field').forEach(f => {
     const i=f.querySelector('.bl-input'); i.disabled=false; i.value='';
@@ -1838,6 +1911,27 @@ dzone.addEventListener('click', () => { dbg('dzone tapped'); });
 
 updateBkBadge(); ready();
 
+// ── IndexedDB에서 파일 복원 ──
+dbLoadAll().then(saved => {
+  let count = 0;
+  Object.entries(saved).forEach(([name, nb]) => {
+    if (!nb.cells) return;
+    const strippedCells = nb.cells.map((c, i) => ({
+      idx: i, type: c.cell_type,
+      src: c.cell_type === 'code'
+        ? stripComments(Array.isArray(c.source) ? c.source.join('') : (c.source || ''))
+        : (Array.isArray(c.source) ? c.source.join('') : (c.source || ''))
+    }));
+    files[name] = { nb, strippedCells };
+    count++;
+  });
+  if (count) {
+    if (!activeFile) activeFile = Object.keys(files)[0];
+    renderFList(); ready();
+    toast('✓ ' + count + '개 파일 복원됨');
+  }
+}).catch(e => dbg('dbLoadAll error: ' + e.message));
+
 // ── Google Drive 연동 ──
 let gisLoading = false;
 let gisReady = false;
@@ -1862,10 +1956,13 @@ function loadGIS() {
 // GIS는 비동기로 미리 로드 — 버튼 클릭 시 requestAccessToken()을 user gesture 안에서 동기 호출하기 위해
 window.addEventListener('load', () => { setTimeout(() => loadGIS().catch(()=>{}), 1000); });
 
-async function fetchDriveFiles(token) {
-  const q = encodeURIComponent("name contains '.ipynb' and trashed=false");
+let driveFolderStack = []; // [{id:'root', name:'내 드라이브'}, ...]
+
+async function fetchDriveFolder(token, folderId) {
+  const parent = folderId || 'root';
+  const q = encodeURIComponent(`'${parent}' in parents and trashed=false and (mimeType='application/vnd.google-apps.folder' or name contains '.ipynb')`);
   const res = await fetch(
-    `https://www.googleapis.com/drive/v3/files?q=${q}&orderBy=modifiedTime%20desc&pageSize=50&fields=files(id,name,modifiedTime)`,
+    `https://www.googleapis.com/drive/v3/files?q=${q}&orderBy=folder,name&pageSize=100&fields=files(id,name,mimeType,modifiedTime)`,
     { headers: { Authorization: 'Bearer ' + token } }
   );
   if (!res.ok) { if (res.status === 401) driveToken = null; throw new Error('Drive API HTTP ' + res.status); }
@@ -1889,7 +1986,7 @@ function openGoogleDrivePicker() {
 
   if (driveToken) {
     btn.disabled = true; btn.textContent = '⏳ 파일 목록 로드 중...';
-    fetchDriveFiles(driveToken).then(showGDriveModal).catch(e => toast('⚠ ' + e.message)).finally(resetBtn);
+    driveFolderStack = [{id:'root',name:'내 드라이브'}]; fetchDriveFolder(driveToken,'root').then(items => showGDriveModal(items)).catch(e => toast('⚠ ' + e.message)).finally(resetBtn);
     return;
   }
 
@@ -1901,31 +1998,82 @@ function openGoogleDrivePicker() {
       if (resp.error) { toast('⚠ ' + (resp.error_description || resp.error)); resetBtn(); return; }
       driveToken = resp.access_token;
       btn.disabled = true; btn.textContent = '⏳ 파일 목록 로드 중...';
-      fetchDriveFiles(driveToken).then(showGDriveModal).catch(e => toast('⚠ ' + e.message)).finally(resetBtn);
+      driveFolderStack = [{id:'root',name:'내 드라이브'}]; fetchDriveFolder(driveToken,'root').then(items => showGDriveModal(items)).catch(e => toast('⚠ ' + e.message)).finally(resetBtn);
     }
   });
   driveTokenClient.requestAccessToken(); // user gesture 안에서 동기 호출
 }
 
-function showGDriveModal(driveFiles) {
-  const m = $('gdrive-modal');
+function showGDriveModal(items) {
   const list = $('gdrive-file-list');
   list.innerHTML = '';
-  if (!driveFiles.length) {
-    list.innerHTML = '<div style="padding:24px;text-align:center;color:#888;font-size:13px">Drive에 .ipynb 파일이 없습니다</div>';
-  } else {
-    driveFiles.forEach(f => {
-      const d = document.createElement('div');
-      d.style.cssText = 'padding:10px 14px;border-bottom:1px solid #f0f0f0;cursor:pointer;display:flex;align-items:center;gap:10px;transition:background .1s';
-      d.innerHTML = `<span style="font-size:16px;flex-shrink:0">📓</span><div style="flex:1;overflow:hidden"><div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#111">${escH(f.name)}</div><div style="font-size:11px;color:#888;margin-top:1px">${new Date(f.modifiedTime).toLocaleString('ko-KR',{dateStyle:'short',timeStyle:'short'})}</div></div><span style="font-size:14px;color:#bbb;flex-shrink:0">›</span>`;
-      d.addEventListener('mouseenter', () => { d.style.background = '#f5f5f5'; });
-      d.addEventListener('mouseleave', () => { d.style.background = ''; });
-      d.addEventListener('click', () => { closeGDriveModal(); loadFromGDrive(f.id, f.name); });
-      list.appendChild(d);
-    });
+
+  // 브레드크럼 네비게이션
+  const nav = document.createElement('div');
+  nav.style.cssText = 'padding:8px 14px;background:#f8f8f8;border-bottom:1px solid #eee;display:flex;align-items:center;gap:4px;flex-wrap:wrap;font-size:12px';
+  driveFolderStack.forEach((folder, i) => {
+    if (i > 0) { const sep = document.createElement('span'); sep.textContent = ' › '; sep.style.color = '#aaa'; nav.appendChild(sep); }
+    const crumb = document.createElement('span');
+    crumb.textContent = folder.name;
+    crumb.style.cssText = i < driveFolderStack.length - 1
+      ? 'color:#1a73e8;cursor:pointer;font-weight:500'
+      : 'color:#333;font-weight:600';
+    if (i < driveFolderStack.length - 1) {
+      crumb.addEventListener('click', () => {
+        driveFolderStack = driveFolderStack.slice(0, i + 1);
+        navigateDriveFolder(folder.id);
+      });
+    }
+    nav.appendChild(crumb);
+  });
+  list.appendChild(nav);
+
+  // 폴더와 파일 분리
+  const folders = items.filter(f => f.mimeType === 'application/vnd.google-apps.folder');
+  const files = items.filter(f => f.mimeType !== 'application/vnd.google-apps.folder');
+
+  if (!folders.length && !files.length) {
+    const empty = document.createElement('div');
+    empty.style.cssText = 'padding:24px;text-align:center;color:#888;font-size:13px';
+    empty.textContent = '이 폴더에 .ipynb 파일이나 하위 폴더가 없습니다';
+    list.appendChild(empty);
   }
+
+  // 폴더 항목
+  folders.forEach(f => {
+    const d = document.createElement('div');
+    d.style.cssText = 'padding:10px 14px;border-bottom:1px solid #f0f0f0;cursor:pointer;display:flex;align-items:center;gap:10px;transition:background .1s';
+    d.innerHTML = `<span style="font-size:16px;flex-shrink:0">📁</span><div style="flex:1;overflow:hidden"><div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#111">${escH(f.name)}</div></div><span style="font-size:14px;color:#bbb;flex-shrink:0">›</span>`;
+    d.addEventListener('mouseenter', () => { d.style.background = '#f0f7ff'; });
+    d.addEventListener('mouseleave', () => { d.style.background = ''; });
+    d.addEventListener('click', () => {
+      driveFolderStack.push({id:f.id, name:f.name});
+      navigateDriveFolder(f.id);
+    });
+    list.appendChild(d);
+  });
+
+  // 파일 항목
+  files.forEach(f => {
+    const d = document.createElement('div');
+    d.style.cssText = 'padding:10px 14px;border-bottom:1px solid #f0f0f0;cursor:pointer;display:flex;align-items:center;gap:10px;transition:background .1s';
+    d.innerHTML = `<span style="font-size:16px;flex-shrink:0">📓</span><div style="flex:1;overflow:hidden"><div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#111">${escH(f.name)}</div><div style="font-size:11px;color:#888;margin-top:1px">${new Date(f.modifiedTime).toLocaleString('ko-KR',{dateStyle:'short',timeStyle:'short'})}</div></div>`;
+    d.addEventListener('mouseenter', () => { d.style.background = '#f5f5f5'; });
+    d.addEventListener('mouseleave', () => { d.style.background = ''; });
+    d.addEventListener('click', () => { closeGDriveModal(); loadFromGDrive(f.id, f.name); });
+    list.appendChild(d);
+  });
+
   $('gdrive-modal').classList.add('visible');
   document.body.classList.add('modal-open');
+}
+
+function navigateDriveFolder(folderId) {
+  const list = $('gdrive-file-list');
+  list.innerHTML = '<div style="padding:24px;text-align:center;color:#888;font-size:13px">⏳ 로딩 중...</div>';
+  fetchDriveFolder(driveToken, folderId)
+    .then(items => showGDriveModal(items))
+    .catch(e => { toast('⚠ ' + e.message); closeGDriveModal(); });
 }
 
 function closeGDriveModal() {
@@ -1955,6 +2103,7 @@ async function loadFromGDrive(fileId, fileName) {
     }));
     const displayName = fileName.endsWith('.ipynb') ? fileName : fileName + '.ipynb';
     files[displayName] = { nb, strippedCells };
+    dbSave(displayName, nb).catch(e => dbg('dbSave error: ' + e.message));
     if (!activeFile) activeFile = displayName;
     renderFList(); ready();
     toast('✓ ' + displayName + ' 로드됨 (' + nb.cells.length + '개 셀)');
