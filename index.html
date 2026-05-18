@@ -462,7 +462,7 @@ body.modal-open { overflow:hidden; }
         <button class="btn" id="reveal-btn">💡 정답</button>
         <button class="btn" id="regen-btn">🔄 다시 뽑기</button>
         <button class="btn" id="reset-btn">↩ 초기화</button>
-        <button class="btn danger" id="file-reset-btn">🗑 설정 변경</button>
+        <button class="btn danger" id="file-reset-btn">🗑 퀴즈 초기화</button>
       </div>
     </div>
     <div id="cells"></div>
@@ -523,7 +523,7 @@ body.modal-open { overflow:hidden; }
 const $ = id => document.getElementById(id);
 
 // ── IndexedDB (파일 영구 저장) ──
-const DBNAME = 'nbquiz_db', DBVER = 2, STORE_NB = 'notebooks', STORE_POOL = 'pools';
+const DBNAME = 'nbquiz_db', DBVER = 3, STORE_NB = 'notebooks', STORE_POOL = 'pools', STORE_QUIZ = 'quizzes';
 function openDB() {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DBNAME, DBVER);
@@ -531,6 +531,7 @@ function openDB() {
       const db = req.result;
       if (!db.objectStoreNames.contains(STORE_NB)) db.createObjectStore(STORE_NB);
       if (!db.objectStoreNames.contains(STORE_POOL)) db.createObjectStore(STORE_POOL);
+      if (!db.objectStoreNames.contains(STORE_QUIZ)) db.createObjectStore(STORE_QUIZ);
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -568,10 +569,13 @@ function dbGetAll(store) {
 }
 // 편의 함수
 function dbSave(name, nb) { return dbPut(STORE_NB, name, nb); }
-function dbDelete(name) { return Promise.all([dbDel(STORE_NB, name), dbDel(STORE_POOL, name)]); }
+function dbDelete(name) { return Promise.all([dbDel(STORE_NB, name), dbDel(STORE_POOL, name), dbDel(STORE_QUIZ, name)]); }
 function dbSavePool(name, poolData) { return dbPut(STORE_POOL, name, poolData); }
+function dbSaveQuiz(name, quiz) { return dbPut(STORE_QUIZ, name, quiz); }
+function dbDeleteQuiz(name) { return dbDel(STORE_QUIZ, name); }
 function dbLoadAll() { return dbGetAll(STORE_NB); }
 function dbLoadPools() { return dbGetAll(STORE_POOL); }
+function dbLoadQuizzes() { return dbGetAll(STORE_QUIZ); }
 
 // ── state ──
 const files = {};             // name → { nb, strippedCells }
@@ -1333,6 +1337,7 @@ async function generateForFile(name, isRegen) {
         dbg('easy: ' + easyBlanks.length + ' blanks, skipping annotation');
       }
       quizCache[name] = { blanks: easyBlanks, mode: 'easy' };
+      dbSaveQuiz(name, quizCache[name]).catch(e => dbg('dbSaveQuiz error: ' + e.message));
       generatingFiles.delete(name); renderFList(); ready();
       if (activeFile === name) {
         prog(90,'렌더링 중...');
@@ -1443,6 +1448,7 @@ async function generateForFile(name, isRegen) {
     });
 
     quizCache[name] = { blanks };
+    dbSaveQuiz(name, quizCache[name]).catch(e => dbg('dbSaveQuiz error: ' + e.message));
     generatingFiles.delete(name);
     renderFList(); ready();
 
@@ -1472,7 +1478,7 @@ function prog(p, msg) { $('load-fill').style.width=p+'%'; $('load-txt').textCont
 
 $('reset-all-btn').addEventListener('click', () => {
   if (!confirm('모든 파일의 퀴즈를 초기화할까요?\n(출제 pool 캐시는 유지됩니다)')) return;
-  Object.keys(quizCache).forEach(k => delete quizCache[k]);
+  Object.keys(quizCache).forEach(k => { dbDeleteQuiz(k).catch(()=>{}); delete quizCache[k]; });
   Object.keys(lineHistory).forEach(k => delete lineHistory[k]);
   // linePool 유지 — Claude pool 캐시 보존 (재생성 시 API 호출 절약)
   renderFList(); hideQuiz(); toast('모든 퀴즈 초기화됨 (pool 캐시 유지)');
@@ -1748,35 +1754,63 @@ $('check-btn').addEventListener('click', async () => {
     const i=tb.querySelector('.tok-inp'); if(i&&!i.disabled) await checkTokenBlank(tb,i);
   }
 });
+let revealOn = false;
 $('reveal-btn').addEventListener('click', () => {
-  document.querySelectorAll('.bl-field').forEach(f => {
-    const i=f.querySelector('.bl-input'); if(i&&!i.disabled) {
-      i.value=f.dataset.answer; i.disabled=true;
-      f.classList.remove('ok','no'); f.classList.add('show');
-      const t=f.querySelector('.bl-tag'); t.className='bl-tag t-show'; t.textContent='!';
-      const tip=f.querySelector('.err-tip'); if(tip) tip.remove();
-    }
-  });
-  document.querySelectorAll('.tok-blank').forEach(tb => {
-    const i=tb.querySelector('.tok-inp'); if(i&&!i.disabled) {
-      i.value=tb.dataset.answer; i.disabled=true;
-      tb.classList.remove('ok','no'); tb.classList.add('show');
-      const t=tb.querySelector('.tok-tag'); t.className='tok-tag t-show'; t.textContent='!';
-    }
-  });
+  if (!revealOn) {
+    // 정답 보기: 사용자 입력 저장 후 정답 표시
+    document.querySelectorAll('.bl-field').forEach(f => {
+      const i=f.querySelector('.bl-input'); if(i&&!i.disabled) {
+        i.dataset.userInput = i.value;
+        i.value=f.dataset.answer; i.disabled=true;
+        f.classList.remove('ok','no'); f.classList.add('show');
+        f.querySelector('.bl-tag').className='bl-tag t-show'; f.querySelector('.bl-tag').textContent='!';
+        const tip=f.querySelector('.err-tip'); if(tip) tip.remove();
+      }
+    });
+    document.querySelectorAll('.tok-blank').forEach(tb => {
+      const i=tb.querySelector('.tok-inp'); if(i&&!i.disabled) {
+        i.dataset.userInput = i.value;
+        i.value=tb.dataset.answer; i.disabled=true;
+        tb.classList.remove('ok','no'); tb.classList.add('show');
+        tb.querySelector('.tok-tag').className='tok-tag t-show'; tb.querySelector('.tok-tag').textContent='!';
+      }
+    });
+    $('reveal-btn').textContent='🔙 내 답 보기';
+    revealOn = true;
+  } else {
+    // 내 답 복원
+    document.querySelectorAll('.bl-field.show').forEach(f => {
+      const i=f.querySelector('.bl-input');
+      i.value = i.dataset.userInput ?? ''; delete i.dataset.userInput;
+      i.disabled=false;
+      f.classList.remove('show');
+      f.querySelector('.bl-tag').className='bl-tag t-idx'; f.querySelector('.bl-tag').textContent=f.dataset.num;
+    });
+    document.querySelectorAll('.tok-blank.show').forEach(tb => {
+      const i=tb.querySelector('.tok-inp');
+      i.value = i.dataset.userInput ?? ''; delete i.dataset.userInput;
+      i.disabled=false;
+      tb.classList.remove('show');
+      tb.querySelector('.tok-tag').className='tok-tag t-idx'; tb.querySelector('.tok-tag').textContent=tb.dataset.num;
+    });
+    $('reveal-btn').textContent='💡 정답';
+    revealOn = false;
+  }
   updateScore();
 });
 $('file-reset-btn').addEventListener('click', () => {
   if (!activeFile) return;
   delete quizCache[activeFile];
   delete lineHistory[activeFile];
+  dbDeleteQuiz(activeFile).catch(e => dbg('dbDeleteQuiz error: ' + e.message));
   // linePool[activeFile]은 유지 (Claude pool 캐시 보존)
   renderFList(); hideQuiz(); ready();
   toast('✓ ' + activeFile + ' 퀴즈 초기화됨 — 설정 변경 후 다시 생성하세요');
 });
 $('reset-btn').addEventListener('click', () => {
+  revealOn = false; $('reveal-btn').textContent='💡 정답';
   document.querySelectorAll('.bl-field').forEach(f => {
-    const i=f.querySelector('.bl-input'); i.disabled=false; i.value='';
+    const i=f.querySelector('.bl-input'); i.disabled=false; i.value=''; delete i.dataset.userInput;
     f.classList.remove('ok','no','show');
     const t=f.querySelector('.bl-tag'); t.className='bl-tag t-idx'; t.textContent=f.dataset.num;
     const tip=f.querySelector('.err-tip'); if(tip) tip.remove();
@@ -1923,7 +1957,7 @@ dzone.addEventListener('click', () => { dbg('dzone tapped'); });
 updateBkBadge(); ready();
 
 // ── IndexedDB에서 파일 + pool 복원 ──
-Promise.all([dbLoadAll(), dbLoadPools()]).then(([savedFiles, savedPools]) => {
+Promise.all([dbLoadAll(), dbLoadPools(), dbLoadQuizzes()]).then(([savedFiles, savedPools, savedQuizzes]) => {
   let count = 0;
   Object.entries(savedFiles).forEach(([name, nb]) => {
     if (!nb.cells) return;
@@ -1941,10 +1975,16 @@ Promise.all([dbLoadAll(), dbLoadPools()]).then(([savedFiles, savedPools]) => {
   Object.entries(savedPools).forEach(([name, poolData]) => {
     if (files[name] && poolData.pool) { linePool[name] = poolData; poolCount++; }
   });
+  // 퀴즈 복원
+  let quizCount = 0;
+  Object.entries(savedQuizzes).forEach(([name, quiz]) => {
+    if (files[name] && quiz.blanks) { quizCache[name] = quiz; quizCount++; }
+  });
   if (count) {
     if (!activeFile) activeFile = Object.keys(files)[0];
     renderFList(); ready();
-    toast('✓ ' + count + '개 파일 복원됨' + (poolCount ? ' (pool ' + poolCount + '개 캐시)' : ''));
+    if (activeFile && quizCache[activeFile]) showFileQuiz(activeFile);
+    toast('✓ ' + count + '개 파일 복원됨' + (quizCount ? ' (퀴즈 ' + quizCount + '개)' : ''));
   }
 }).catch(e => dbg('dbLoad error: ' + e.message));
 
