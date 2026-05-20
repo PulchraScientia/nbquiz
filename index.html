@@ -1226,7 +1226,11 @@ function buildEasyBlanks(strippedCells, pct, maxTok) {
       if (linesUsed >= targetLines) break;
       const allToks = group.flatMap(l => extractBlankableTokens(l));
       if (!allToks.length) continue;
-      const shuffToks = [...allToks];
+      // 같은 텍스트 토큰 중복 제거 (그룹 내 다른 줄에 같은 단어가 있을 수 있음)
+      const seenText = new Set();
+      const dedupToks = allToks.filter(t => { if (seenText.has(t.text)) return false; seenText.add(t.text); return true; });
+      if (!dedupToks.length) continue;
+      const shuffToks = [...dedupToks];
       for (let i=shuffToks.length-1;i>0;i--) {
         const j=Math.floor(Math.random()*(i+1));
         [shuffToks[i],shuffToks[j]]=[shuffToks[j],shuffToks[i]];
