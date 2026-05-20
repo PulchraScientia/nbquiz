@@ -354,6 +354,9 @@ body.modal-open { overflow:hidden; }
 
 <header class="topbar">
   <div class="logo">nb<span>.</span>quiz</div>
+  <select id="file-select" style="max-width:180px;font-family:var(--sans);font-size:11px;padding:4px 6px;border:1px solid var(--border2);border-radius:var(--rs);background:#fff;color:var(--text);outline:none;cursor:pointer;overflow:hidden;text-overflow:ellipsis">
+    <option value="">파일 선택...</option>
+  </select>
   <div class="spacer"></div>
   <div class="tabs">
     <button class="tab on" id="tab-q" onclick="switchTab('q')">퀴즈</button>
@@ -848,6 +851,12 @@ $('consec-btn').addEventListener('click', () => {
 const savedKey = localStorage.getItem('nbq_key');
 if (savedKey) $('api-key').value = savedKey;
 $('api-key').addEventListener('input', () => { localStorage.setItem('nbq_key', $('api-key').value.trim()); ready(); });
+$('file-select').addEventListener('change', () => {
+  const name = $('file-select').value;
+  if (!name || !files[name]) return;
+  const prevFile = activeFile;
+  activeFile = name; renderFList(); ready(); showFileQuiz(name, prevFile);
+});
 
 // ── file handling ──
 // 파일 input — iOS 호환을 위해 버튼 클릭 → input.click() 트리거
@@ -984,6 +993,15 @@ function renderFList() {
       else hideQuiz();
     });
     el.appendChild(d);
+  });
+  // topbar 파일 select 동기화
+  const sel = $('file-select');
+  sel.innerHTML = '<option value="">파일 선택...</option>';
+  Object.keys(files).forEach(name => {
+    const opt = document.createElement('option');
+    opt.value = name; opt.textContent = name;
+    if (name === activeFile) opt.selected = true;
+    sel.appendChild(opt);
   });
 }
 
