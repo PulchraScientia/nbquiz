@@ -995,9 +995,10 @@ function hideQuiz() {
   $('qpanel').classList.remove('on'); $('qpanel').style.display='none';
   $('score').style.display='none'; $('empty').style.display='flex';
 }
+const quizDomCache = {}; // name → DOM element (입력 상태 포함)
+
 function showFileQuiz(name) {
   if (!files[name]) return;
-  // 이 파일이 생성 중이면 로딩 스피너 표시
   if (generatingFiles.has(name)) {
     $('empty').style.display='none';
     $('qpanel').classList.remove('on'); $('qpanel').style.display='none';
@@ -1007,7 +1008,26 @@ function showFileQuiz(name) {
   }
   if (quizCache[name]) {
     $('loading').classList.remove('on');
-    renderQuiz(files[name].strippedCells, quizCache[name].blanks);
+    const container = $('cells');
+    // 현재 파일의 DOM 저장
+    if (activeFile && activeFile !== name && container.children.length) {
+      quizDomCache[activeFile] = container.cloneNode(true);
+      // 입력값은 cloneNode로 복사 안 되므로 수동 복사
+      const origInputs = container.querySelectorAll('input,textarea');
+      const clonedInputs = quizDomCache[activeFile].querySelectorAll('input,textarea');
+      origInputs.forEach((inp, i) => { if (clonedInputs[i]) clonedInputs[i].value = inp.value; });
+    }
+    // 캐시된 DOM이 있으면 복원, 없으면 새로 렌더링
+    if (quizDomCache[name]) {
+      container.innerHTML = '';
+      while (quizDomCache[name].firstChild) container.appendChild(quizDomCache[name].firstChild);
+      delete quizDomCache[name];
+      $('qfile').textContent = name;
+      // 이벤트 재연결
+      rebindQuizEvents(container);
+    } else {
+      renderQuiz(files[name].strippedCells, quizCache[name].blanks);
+    }
     $('empty').style.display='none';
     $('qpanel').classList.add('on'); $('qpanel').style.display='flex';
     $('score').style.display='flex';
@@ -1016,6 +1036,40 @@ function showFileQuiz(name) {
     $('loading').classList.remove('on');
     hideQuiz();
   }
+}
+
+function rebindQuizEvents(container) {
+  // 줄 단위 빈칸 이벤트
+  container.querySelectorAll('.bl-field').forEach(field => {
+    const inp = field.querySelector('.bl-input');
+    const tag = field.querySelector('.bl-tag');
+    if (!inp) return;
+    inp.onkeydown = e => {
+      if (e.key==='Enter'){e.preventDefault();checkField(field,inp);}
+      if (e.key==='Tab'){e.preventDefault();const s=inp.selectionStart,en=inp.selectionEnd;inp.value=inp.value.slice(0,s)+'    '+inp.value.slice(en);inp.selectionStart=inp.selectionEnd=s+4;}
+    };
+    inp.oninput = () => {
+      field.classList.remove('ok','no','show'); tag.className='bl-tag t-idx'; tag.textContent=field.dataset.num;
+      const tip=field.querySelector('.err-tip'); if(tip) tip.remove();
+    };
+  });
+  // 토큰 빈칸 이벤트
+  container.querySelectorAll('.tok-blank').forEach(tb => {
+    const tinp = tb.querySelector('.tok-inp');
+    const ttag = tb.querySelector('.tok-tag');
+    if (!tinp) return;
+    tinp.onkeydown = e => { if(e.key==='Enter'){e.preventDefault();checkTokenBlank(tb,tinp);} };
+    tinp.oninput = () => { tb.classList.remove('ok','no','show'); ttag.className='tok-tag t-idx'; ttag.textContent=tb.dataset.num; };
+  });
+  // 북마크 버튼
+  container.querySelectorAll('.bk-btn').forEach(btn => {
+    btn.onclick = () => {
+      const cellIdx = parseInt(btn.closest('.cell').querySelector('.cell-exec-num').textContent.replace(/[^\d]/g,''));
+      const s = files[activeFile]?.strippedCells?.find(c=>c.idx===cellIdx)?.src || '';
+      const blanks = quizCache[activeFile]?.blanks?.filter(b=>b.cell_idx===cellIdx) || [];
+      toggleBk({idx:cellIdx,src:s}, blanks, btn);
+    };
+  });
 }
 
 function toast(msg) {
@@ -1632,23 +1686,34 @@ function renderQuizEasy(strippedCells, easyBlanks, container) {
       const body=document.createElement('div'); body.className='cell-body';
       if (!hasBlank) { body.innerHTML=highlightPython(cell.src); inner.appendChild(body); wrap.appendChild(inner); container.appendChild(wrap); return; }
 
-      // build line → tokens map for this cell
-      const lineTokenMap = new Map(); // original_line_text → [{token, blankObj}]
+      // build lineIndex → tokens map (줄 텍스트가 아닌 줄 번호로 매핑 — 동일 텍스트 줄 중복 방지)
+      const lines = cell.src.split('\n');
+      const lineIdxTokenMap = new Map(); // lineIndex → [{tok, blank}]
       cellBlanks.forEach(b => {
-        b.group_lines.forEach(gl => {
-          if (!lineTokenMap.has(gl)) lineTokenMap.set(gl, []);
-        });
         b.tokens.forEach(t => {
-          if (!lineTokenMap.has(t.line)) lineTokenMap.set(t.line, []);
-          lineTokenMap.get(t.line).push({ tok:t, blank:b });
+          // t.line은 텍스트 → 셀 내 실제 줄 인덱스 찾기 (group_lines 범위 내)
+          const groupStartIdx = lines.indexOf(b.group_lines[0]);
+          for (let gi = 0; gi < b.group_lines.length; gi++) {
+            const realIdx = groupStartIdx + gi;
+            if (realIdx >= 0 && realIdx < lines.length && lines[realIdx] === t.line) {
+              if (!lineIdxTokenMap.has(realIdx)) lineIdxTokenMap.set(realIdx, []);
+              lineIdxTokenMap.get(realIdx).push({ tok:t, blank:b });
+              break;
+            }
+          }
+        });
+        // group_lines도 인덱스로 등록 (토큰 없는 줄도 그룹에 포함)
+        const gsi = lines.indexOf(b.group_lines[0]);
+        b.group_lines.forEach((gl, gi) => {
+          const ri = gsi + gi;
+          if (ri >= 0 && !lineIdxTokenMap.has(ri)) lineIdxTokenMap.set(ri, []);
         });
       });
 
-      const lines = cell.src.split('\n');
       lines.forEach((line, li) => {
-        if (lineTokenMap.has(line) && lineTokenMap.get(line).length > 0) {
+        if (lineIdxTokenMap.has(li) && lineIdxTokenMap.get(li).length > 0) {
           // render line with inline token blanks
-          const entries = lineTokenMap.get(line).sort((a,b)=>a.tok.start-b.tok.start);
+          const entries = lineIdxTokenMap.get(li).sort((a,b)=>a.tok.start-b.tok.start);
           let cursor = 0;
           entries.forEach(({tok, blank}) => {
             // text before token
