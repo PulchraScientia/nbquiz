@@ -357,6 +357,7 @@ body.modal-open { overflow:hidden; }
   <select id="file-select" style="max-width:180px;font-family:var(--sans);font-size:11px;padding:4px 6px;border:1px solid var(--border2);border-radius:var(--rs);background:#fff;color:var(--text);outline:none;cursor:pointer;overflow:hidden;text-overflow:ellipsis">
     <option value="">파일 선택...</option>
   </select>
+  <button class="btn-gen" id="gen-btn" disabled style="padding:5px 12px;font-size:11px;white-space:nowrap">퀴즈 생성</button>
   <div class="spacer"></div>
   <div class="tabs">
     <button class="tab on" id="tab-q" onclick="switchTab('q')">퀴즈</button>
@@ -440,7 +441,6 @@ body.modal-open { overflow:hidden; }
     <div id="flist"></div>
   </div>
   <div class="sb-footer">
-    <button class="btn-gen" id="gen-btn" disabled>이 파일 퀴즈 생성</button>
     <button class="btn-reset-all" id="reset-all-btn">⚠ 모든 파일 퀴즈 초기화</button>
     <div class="model-tag">claude-sonnet-4-6</div>
   </div>
