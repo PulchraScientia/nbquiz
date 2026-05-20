@@ -970,7 +970,8 @@ function renderFList() {
       <button class="fi-del" data-n="${name}">✕</button>`;
     d.addEventListener('click', e => {
       if (e.target.classList.contains('fi-del')) return;
-      activeFile = name; renderFList(); ready(); showFileQuiz(name);
+      const prevFile = activeFile;
+      activeFile = name; renderFList(); ready(); showFileQuiz(name, prevFile);
     });
     d.querySelector('.fi-del').addEventListener('click', e => {
       e.stopPropagation();
@@ -997,7 +998,7 @@ function hideQuiz() {
 }
 const quizDomCache = {}; // name → DOM element (입력 상태 포함)
 
-function showFileQuiz(name) {
+function showFileQuiz(name, prevFile) {
   if (!files[name]) return;
   if (generatingFiles.has(name)) {
     $('empty').style.display='none';
@@ -1009,12 +1010,12 @@ function showFileQuiz(name) {
   if (quizCache[name]) {
     $('loading').classList.remove('on');
     const container = $('cells');
-    // 현재 파일의 DOM 저장
-    if (activeFile && activeFile !== name && container.children.length) {
-      quizDomCache[activeFile] = container.cloneNode(true);
+    // 이전 파일의 DOM 저장
+    if (prevFile && prevFile !== name && container.children.length) {
+      quizDomCache[prevFile] = container.cloneNode(true);
       // 입력값은 cloneNode로 복사 안 되므로 수동 복사
       const origInputs = container.querySelectorAll('input,textarea');
-      const clonedInputs = quizDomCache[activeFile].querySelectorAll('input,textarea');
+      const clonedInputs = quizDomCache[prevFile].querySelectorAll('input,textarea');
       origInputs.forEach((inp, i) => { if (clonedInputs[i]) clonedInputs[i].value = inp.value; });
     }
     // 캐시된 DOM이 있으면 복원, 없으면 새로 렌더링
