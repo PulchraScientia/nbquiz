@@ -1062,14 +1062,21 @@ function rebindQuizEvents(container) {
     tinp.onkeydown = e => { if(e.key==='Enter'){e.preventDefault();checkTokenBlank(tb,tinp);} };
     tinp.oninput = () => { tb.classList.remove('ok','no','show'); ttag.className='tok-tag t-idx'; ttag.textContent=tb.dataset.num; };
   });
-  // 북마크 버튼
+  // 북마크 + 정답 토글 버튼
   container.querySelectorAll('.bk-btn').forEach(btn => {
-    btn.onclick = () => {
-      const cellIdx = parseInt(btn.closest('.cell').querySelector('.cell-exec-num').textContent.replace(/[^\d]/g,''));
-      const s = files[activeFile]?.strippedCells?.find(c=>c.idx===cellIdx)?.src || '';
-      const blanks = quizCache[activeFile]?.blanks?.filter(b=>b.cell_idx===cellIdx) || [];
-      toggleBk({idx:cellIdx,src:s}, blanks, btn);
-    };
+    if (btn.dataset.revealing !== undefined) {
+      // 정답 토글 버튼
+      const cellWrap = btn.closest('.cell');
+      btn.onclick = () => toggleCellReveal(cellWrap, btn);
+    } else {
+      // 북마크 버튼
+      btn.onclick = () => {
+        const cellIdx = parseInt(btn.closest('.cell').querySelector('.cell-exec-num').textContent.replace(/[^\d]/g,''));
+        const s = files[activeFile]?.strippedCells?.find(c=>c.idx===cellIdx)?.src || '';
+        const blanks = quizCache[activeFile]?.blanks?.filter(b=>b.cell_idx===cellIdx) || [];
+        toggleBk({idx:cellIdx,src:s}, blanks, btn);
+      };
+    }
   });
 }
 
@@ -1587,6 +1594,10 @@ function renderQuiz(strippedCells, blanks) {
         toggleBk({ idx: cell.idx, src: origSrc }, bmap[cell.idx], bkb);
       });
       gutter.appendChild(bkb);
+      const rvb=document.createElement('button'); rvb.className='bk-btn'; rvb.title='정답 보기'; rvb.textContent='💡';
+      rvb.dataset.revealing='false';
+      rvb.addEventListener('click', () => toggleCellReveal(wrap, rvb));
+      gutter.appendChild(rvb);
     }
     wrap.appendChild(gutter);
     const inner = document.createElement('div'); inner.className = 'cell-inner';
@@ -1675,6 +1686,10 @@ function renderQuizEasy(strippedCells, easyBlanks, container) {
       bkb.title='오답 복습에 저장'; bkb.textContent='🔖';
       bkb.addEventListener('click',()=>{ const s=files[activeFile].strippedCells[cell.idx]?.src||cell.src; toggleBk({idx:cell.idx,src:s},cellBlanks,bkb); });
       gutter.appendChild(bkb);
+      const rvb=document.createElement('button'); rvb.className='bk-btn'; rvb.title='정답 보기'; rvb.textContent='💡';
+      rvb.dataset.revealing='false';
+      rvb.addEventListener('click', () => toggleCellReveal(wrap, rvb));
+      gutter.appendChild(rvb);
     }
     wrap.appendChild(gutter);
     const inner=document.createElement('div'); inner.className='cell-inner';
@@ -1821,6 +1836,49 @@ $('check-btn').addEventListener('click', async () => {
   }
 });
 let revealOn = false;
+
+function toggleCellReveal(cellWrap, btn) {
+  const showing = btn.dataset.revealing === 'true';
+  if (!showing) {
+    // 정답 보기
+    cellWrap.querySelectorAll('.bl-field').forEach(f => {
+      const i=f.querySelector('.bl-input'); if(i&&!i.disabled) {
+        i.dataset.userInput = i.value;
+        i.value=f.dataset.answer; i.disabled=true;
+        f.classList.remove('ok','no'); f.classList.add('show');
+        f.querySelector('.bl-tag').className='bl-tag t-show'; f.querySelector('.bl-tag').textContent='!';
+        const tip=f.querySelector('.err-tip'); if(tip) tip.remove();
+      }
+    });
+    cellWrap.querySelectorAll('.tok-blank').forEach(tb => {
+      const i=tb.querySelector('.tok-inp'); if(i&&!i.disabled) {
+        i.dataset.userInput = i.value;
+        i.value=tb.dataset.answer; i.disabled=true;
+        tb.classList.remove('ok','no'); tb.classList.add('show');
+        tb.querySelector('.tok-tag').className='tok-tag t-show'; tb.querySelector('.tok-tag').textContent='!';
+      }
+    });
+    btn.textContent='🔙'; btn.title='내 답 보기';
+    btn.dataset.revealing = 'true';
+  } else {
+    // 내 답 복원
+    cellWrap.querySelectorAll('.bl-field.show').forEach(f => {
+      const i=f.querySelector('.bl-input');
+      i.value = i.dataset.userInput ?? ''; delete i.dataset.userInput;
+      i.disabled=false; f.classList.remove('show');
+      f.querySelector('.bl-tag').className='bl-tag t-idx'; f.querySelector('.bl-tag').textContent=f.dataset.num;
+    });
+    cellWrap.querySelectorAll('.tok-blank.show').forEach(tb => {
+      const i=tb.querySelector('.tok-inp');
+      i.value = i.dataset.userInput ?? ''; delete i.dataset.userInput;
+      i.disabled=false; tb.classList.remove('show');
+      tb.querySelector('.tok-tag').className='tok-tag t-idx'; tb.querySelector('.tok-tag').textContent=tb.dataset.num;
+    });
+    btn.textContent='💡'; btn.title='정답 보기';
+    btn.dataset.revealing = 'false';
+  }
+  updateScore();
+}
 $('reveal-btn').addEventListener('click', () => {
   if (!revealOn) {
     // 정답 보기: 사용자 입력 저장 후 정답 표시
