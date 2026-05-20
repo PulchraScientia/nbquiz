@@ -526,7 +526,7 @@ body.modal-open { overflow:hidden; }
 const $ = id => document.getElementById(id);
 
 // ── IndexedDB (파일 영구 저장) ──
-const DBNAME = 'nbquiz_db', DBVER = 3, STORE_NB = 'notebooks', STORE_POOL = 'pools', STORE_QUIZ = 'quizzes';
+const DBNAME = 'nbquiz_db', DBVER = 4, STORE_NB = 'notebooks', STORE_POOL = 'pools', STORE_QUIZ = 'quizzes', STORE_INPUT = 'inputs';
 function openDB() {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DBNAME, DBVER);
@@ -535,6 +535,7 @@ function openDB() {
       if (!db.objectStoreNames.contains(STORE_NB)) db.createObjectStore(STORE_NB);
       if (!db.objectStoreNames.contains(STORE_POOL)) db.createObjectStore(STORE_POOL);
       if (!db.objectStoreNames.contains(STORE_QUIZ)) db.createObjectStore(STORE_QUIZ);
+      if (!db.objectStoreNames.contains(STORE_INPUT)) db.createObjectStore(STORE_INPUT);
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -575,7 +576,9 @@ function dbSave(name, nb) { return dbPut(STORE_NB, name, nb); }
 function dbDelete(name) { return Promise.all([dbDel(STORE_NB, name), dbDel(STORE_POOL, name), dbDel(STORE_QUIZ, name)]); }
 function dbSavePool(name, poolData) { return dbPut(STORE_POOL, name, poolData); }
 function dbSaveQuiz(name, quiz) { return dbPut(STORE_QUIZ, name, quiz); }
-function dbDeleteQuiz(name) { return dbDel(STORE_QUIZ, name); }
+function dbDeleteQuiz(name) { return Promise.all([dbDel(STORE_QUIZ, name), dbDel(STORE_INPUT, name)]); }
+function dbSaveInputs(name, data) { return dbPut(STORE_INPUT, name, data); }
+function dbLoadInputs() { return dbGetAll(STORE_INPUT); }
 function dbLoadAll() { return dbGetAll(STORE_NB); }
 function dbLoadPools() { return dbGetAll(STORE_POOL); }
 function dbLoadQuizzes() { return dbGetAll(STORE_QUIZ); }
@@ -2108,10 +2111,76 @@ if (location.search.includes('debug')) $('dbg-panel').style.display = 'block';
 // 파일 input 클릭 이벤트 로깅
 dzone.addEventListener('click', () => { dbg('dzone tapped'); });
 
+// ── 입력값 저장/복원 + 스크롤 위치 보존 ──
+function collectInputState(name) {
+  if (!name || !quizCache[name]) return null;
+  const container = $('cells');
+  const inputs = [];
+  container.querySelectorAll('.bl-field').forEach(f => {
+    const inp = f.querySelector('.bl-input');
+    inputs.push({ type:'bl', value: inp?.value||'', disabled: inp?.disabled||false, cls: f.className, tagCls: f.querySelector('.bl-tag')?.className||'', tagText: f.querySelector('.bl-tag')?.textContent||'' });
+  });
+  container.querySelectorAll('.tok-blank').forEach(tb => {
+    const inp = tb.querySelector('.tok-inp');
+    inputs.push({ type:'tok', value: inp?.value||'', disabled: inp?.disabled||false, cls: tb.className, tagCls: tb.querySelector('.tok-tag')?.className||'', tagText: tb.querySelector('.tok-tag')?.textContent||'' });
+  });
+  const mainEl = document.querySelector('.main');
+  return { inputs, scrollTop: mainEl.scrollTop };
+}
+
+function restoreInputState(name, state) {
+  if (!state || !state.inputs) return;
+  const container = $('cells');
+  let idx = 0;
+  container.querySelectorAll('.bl-field').forEach(f => {
+    const s = state.inputs[idx++];
+    if (!s || s.type !== 'bl') return;
+    const inp = f.querySelector('.bl-input');
+    if (inp) { inp.value = s.value; inp.disabled = s.disabled; }
+    f.className = s.cls;
+    const tag = f.querySelector('.bl-tag'); if (tag) { tag.className = s.tagCls; tag.textContent = s.tagText; }
+  });
+  container.querySelectorAll('.tok-blank').forEach(tb => {
+    const s = state.inputs[idx++];
+    if (!s || s.type !== 'tok') return;
+    const inp = tb.querySelector('.tok-inp');
+    if (inp) { inp.value = s.value; inp.disabled = s.disabled; }
+    tb.className = s.cls;
+    const tag = tb.querySelector('.tok-tag'); if (tag) { tag.className = s.tagCls; tag.textContent = s.tagText; }
+  });
+  if (state.scrollTop != null) {
+    const mainEl = document.querySelector('.main');
+    requestAnimationFrame(() => { mainEl.scrollTop = state.scrollTop; });
+  }
+  updateScore();
+}
+
+function saveAllInputs() {
+  if (activeFile && quizCache[activeFile]) {
+    const state = collectInputState(activeFile);
+    if (state) dbSaveInputs(activeFile, state).catch(e => dbg('dbSaveInputs error: ' + e.message));
+  }
+}
+
+// 탭 전환/페이지 이탈 시 저장, 돌아올 때 스크롤 복원
+let savedScrollBeforeHide = null;
+document.addEventListener('visibilitychange', () => {
+  const mainEl = document.querySelector('.main');
+  if (document.hidden) {
+    savedScrollBeforeHide = mainEl.scrollTop;
+    saveAllInputs();
+  } else {
+    if (savedScrollBeforeHide != null) {
+      requestAnimationFrame(() => { mainEl.scrollTop = savedScrollBeforeHide; savedScrollBeforeHide = null; });
+    }
+  }
+});
+window.addEventListener('beforeunload', saveAllInputs);
+
 updateBkBadge(); ready();
 
 // ── IndexedDB에서 파일 + pool 복원 ──
-Promise.all([dbLoadAll(), dbLoadPools(), dbLoadQuizzes()]).then(([savedFiles, savedPools, savedQuizzes]) => {
+Promise.all([dbLoadAll(), dbLoadPools(), dbLoadQuizzes(), dbLoadInputs()]).then(([savedFiles, savedPools, savedQuizzes, savedInputs]) => {
   let count = 0;
   Object.entries(savedFiles).forEach(([name, nb]) => {
     if (!nb.cells) return;
@@ -2137,7 +2206,13 @@ Promise.all([dbLoadAll(), dbLoadPools(), dbLoadQuizzes()]).then(([savedFiles, sa
   if (count) {
     if (!activeFile) activeFile = Object.keys(files)[0];
     renderFList(); ready();
-    if (activeFile && quizCache[activeFile]) showFileQuiz(activeFile);
+    if (activeFile && quizCache[activeFile]) {
+      showFileQuiz(activeFile);
+      // 입력값 복원
+      if (savedInputs[activeFile]) {
+        setTimeout(() => restoreInputState(activeFile, savedInputs[activeFile]), 50);
+      }
+    }
     toast('✓ ' + count + '개 파일 복원됨' + (quizCount ? ' (퀴즈 ' + quizCount + '개)' : ''));
   }
 }).catch(e => dbg('dbLoad error: ' + e.message));
