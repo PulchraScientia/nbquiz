@@ -976,7 +976,7 @@ function renderFList() {
     d.querySelector('.fi-del').addEventListener('click', e => {
       e.stopPropagation();
       generatingFiles.delete(name);
-      delete files[name]; delete quizCache[name]; delete linePool[name]; delete lineHistory[name];
+      delete files[name]; delete quizCache[name]; delete linePool[name]; delete lineHistory[name]; delete quizDomCache[name]; delete quizScrollCache[name];
       dbDelete(name).catch(e => dbg('dbDelete error: ' + e.message));
       activeFile = Object.keys(files)[0] || null;
       renderFList(); ready();
@@ -997,6 +997,7 @@ function hideQuiz() {
   $('score').style.display='none'; $('empty').style.display='flex';
 }
 const quizDomCache = {}; // name → DOM element (입력 상태 포함)
+const quizScrollCache = {}; // name → scrollTop
 
 function showFileQuiz(name, prevFile) {
   if (!files[name]) return;
@@ -1010,10 +1011,11 @@ function showFileQuiz(name, prevFile) {
   if (quizCache[name]) {
     $('loading').classList.remove('on');
     const container = $('cells');
-    // 이전 파일의 DOM 저장
+    // 이전 파일의 DOM + 스크롤 위치 저장
+    const mainEl = document.querySelector('.main');
     if (prevFile && prevFile !== name && container.children.length) {
+      quizScrollCache[prevFile] = mainEl.scrollTop;
       quizDomCache[prevFile] = container.cloneNode(true);
-      // 입력값은 cloneNode로 복사 안 되므로 수동 복사
       const origInputs = container.querySelectorAll('input,textarea');
       const clonedInputs = quizDomCache[prevFile].querySelectorAll('input,textarea');
       origInputs.forEach((inp, i) => { if (clonedInputs[i]) clonedInputs[i].value = inp.value; });
@@ -1024,7 +1026,6 @@ function showFileQuiz(name, prevFile) {
       while (quizDomCache[name].firstChild) container.appendChild(quizDomCache[name].firstChild);
       delete quizDomCache[name];
       $('qfile').textContent = name;
-      // 이벤트 재연결
       rebindQuizEvents(container);
     } else {
       renderQuiz(files[name].strippedCells, quizCache[name].blanks);
@@ -1033,6 +1034,10 @@ function showFileQuiz(name, prevFile) {
     $('qpanel').classList.add('on'); $('qpanel').style.display='flex';
     $('score').style.display='flex';
     updateScore();
+    // 스크롤 위치 복원
+    if (quizScrollCache[name] != null) {
+      requestAnimationFrame(() => { mainEl.scrollTop = quizScrollCache[name]; delete quizScrollCache[name]; });
+    }
   } else {
     $('loading').classList.remove('on');
     hideQuiz();
@@ -1546,6 +1551,8 @@ $('reset-all-btn').addEventListener('click', () => {
   if (!confirm('모든 파일의 퀴즈를 초기화할까요?\n(출제 pool 캐시는 유지됩니다)')) return;
   Object.keys(quizCache).forEach(k => { dbDeleteQuiz(k).catch(()=>{}); delete quizCache[k]; });
   Object.keys(lineHistory).forEach(k => delete lineHistory[k]);
+  Object.keys(quizDomCache).forEach(k => delete quizDomCache[k]);
+  Object.keys(quizScrollCache).forEach(k => delete quizScrollCache[k]);
   // linePool 유지 — Claude pool 캐시 보존 (재생성 시 API 호출 절약)
   renderFList(); hideQuiz(); toast('모든 퀴즈 초기화됨 (pool 캐시 유지)');
 });
@@ -1930,6 +1937,7 @@ $('file-reset-btn').addEventListener('click', () => {
   if (!activeFile) return;
   delete quizCache[activeFile];
   delete lineHistory[activeFile];
+  delete quizDomCache[activeFile]; delete quizScrollCache[activeFile];
   dbDeleteQuiz(activeFile).catch(e => dbg('dbDeleteQuiz error: ' + e.message));
   // linePool[activeFile]은 유지 (Claude pool 캐시 보존)
   renderFList(); hideQuiz(); ready();
