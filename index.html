@@ -357,7 +357,14 @@ body.modal-open { overflow:hidden; }
   <select id="file-select" style="max-width:180px;font-family:var(--sans);font-size:11px;padding:4px 6px;border:1px solid var(--border2);border-radius:var(--rs);background:#fff;color:var(--text);outline:none;cursor:pointer;overflow:hidden;text-overflow:ellipsis">
     <option value="">파일 선택...</option>
   </select>
-  <button class="btn-gen" id="gen-btn" disabled style="padding:5px 12px;font-size:11px;white-space:nowrap">퀴즈 생성</button>
+  <button id="gen-btn" disabled style="padding:4px 10px;font-size:11px;white-space:nowrap;background:var(--accent);color:#fff;border:1px solid var(--accent);border-radius:var(--rs);font-family:var(--sans);cursor:pointer;transition:opacity .15s">퀴즈 생성</button>
+  <div id="quiz-actions" style="display:none;gap:3px;align-items:center">
+    <button class="btn primary" id="check-btn" style="font-size:11px;padding:4px 8px">✓ 채점</button>
+    <button class="btn" id="reveal-btn" style="font-size:11px;padding:4px 8px">💡 정답</button>
+    <button class="btn" id="regen-btn" style="font-size:11px;padding:4px 8px">🔄 다시 뽑기</button>
+    <button class="btn" id="reset-btn" style="font-size:11px;padding:4px 8px">↩ 초기화</button>
+    <button class="btn danger" id="file-reset-btn" style="font-size:11px;padding:4px 8px">🗑 퀴즈 초기화</button>
+  </div>
   <div class="spacer"></div>
   <div class="tabs">
     <button class="tab on" id="tab-q" onclick="switchTab('q')">퀴즈</button>
@@ -460,13 +467,6 @@ body.modal-open { overflow:hidden; }
   <div class="panel" id="qpanel">
     <div class="pnl-hdr">
       <div class="pnl-title">파일: <span id="qfile">—</span></div>
-      <div class="actions">
-        <button class="btn primary" id="check-btn">✓ 채점</button>
-        <button class="btn" id="reveal-btn">💡 정답</button>
-        <button class="btn" id="regen-btn">🔄 다시 뽑기</button>
-        <button class="btn" id="reset-btn">↩ 초기화</button>
-        <button class="btn danger" id="file-reset-btn">🗑 퀴즈 초기화</button>
-      </div>
     </div>
     <div id="cells"></div>
   </div>
@@ -1016,6 +1016,7 @@ function ready() {
 function hideQuiz() {
   $('qpanel').classList.remove('on'); $('qpanel').style.display='none';
   $('score').style.display='none'; $('empty').style.display='flex';
+  $('quiz-actions').style.display='none';
 }
 const quizDomCache = {}; // name → DOM element (입력 상태 포함)
 const quizScrollCache = {}; // name → scrollTop
@@ -1054,6 +1055,7 @@ function showFileQuiz(name, prevFile) {
     $('empty').style.display='none';
     $('qpanel').classList.add('on'); $('qpanel').style.display='flex';
     $('score').style.display='flex';
+    $('quiz-actions').style.display='flex';
     updateScore();
     // 스크롤 위치 복원
     if (quizScrollCache[name] != null) {
@@ -1118,9 +1120,10 @@ function switchTab(t) {
     if (activeFile && quizCache[activeFile]) {
       $('empty').style.display='none';
       $('qpanel').classList.add('on'); $('qpanel').style.display='flex';
-    } else { $('qpanel').style.display='none'; $('empty').style.display='flex'; }
+      $('quiz-actions').style.display='flex';
+    } else { $('qpanel').style.display='none'; $('empty').style.display='flex'; $('quiz-actions').style.display='none'; }
   } else {
-    $('qpanel').style.display='none'; $('empty').style.display='none';
+    $('qpanel').style.display='none'; $('empty').style.display='none'; $('quiz-actions').style.display='none';
     $('loading').classList.remove('on');
     $('rpanel').classList.add('on'); renderReview();
   }
