@@ -43,7 +43,9 @@
 body { font-family:var(--sans); background:var(--bg); color:var(--text); min-height:100vh; line-height:1.5; -webkit-font-smoothing:antialiased }
 
 /* ── layout ── */
-.shell { display:grid; grid-template-columns:260px 1fr; grid-template-rows:48px 1fr; min-height:100vh }
+.shell { display:grid; grid-template-columns:260px 1fr; grid-template-rows:48px 1fr; min-height:100vh; transition:grid-template-columns .2s }
+.shell.sb-hidden { grid-template-columns:0 1fr }
+.shell.sb-hidden .sidebar { display:none }
 @media(max-width:768px) { .shell { grid-template-columns:1fr } }
 
 /* ── topbar — Jupyter menubar style ── */
@@ -345,6 +347,35 @@ body.modal-open { overflow:hidden; }
 /* SR buttons */
 .sr-btn { background:none; border:none; cursor:pointer; font-size:13px; padding:2px 3px; border-radius:2px; transition:opacity .15s; line-height:1 }
 .sr-btn:hover { opacity:.7; background:var(--bg3) }
+/* ── Q&A 플로팅 창 ── */
+#qa-panel { position:fixed; bottom:16px; left:16px; z-index:900; font-family:var(--sans); }
+#qa-expanded {
+  width:320px; max-height:450px; background:#fff; border:1px solid var(--border2);
+  border-radius:8px; box-shadow:0 4px 20px rgba(0,0,0,0.15); display:flex; flex-direction:column; overflow:hidden;
+}
+#qa-header {
+  display:flex; align-items:center; gap:6px; padding:8px 12px; background:#f5f5f5;
+  border-bottom:1px solid var(--border); font-size:12px; font-weight:600; color:var(--text);
+}
+#qa-header-title { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#qa-header button { background:none; border:none; cursor:pointer; font-size:14px; color:var(--text3); padding:2px 4px; line-height:1; }
+#qa-header button:hover { color:var(--text); }
+#qa-messages { flex:1; overflow-y:auto; padding:10px; min-height:120px; max-height:280px; font-size:12px; line-height:1.6; }
+#qa-messages:empty::before { content:'이 셀에 대해 질문해보세요'; color:var(--text3); font-size:12px; }
+.qa-q { background:#e3f2fd; border-radius:6px; padding:6px 10px; margin-bottom:6px; color:#1565c0; }
+.qa-a { background:#f5f5f5; border-radius:6px; padding:6px 10px; margin-bottom:10px; color:var(--text); white-space:pre-wrap; word-break:break-word; }
+.qa-loading { color:var(--text3); font-style:italic; }
+#qa-footer { display:flex; gap:6px; padding:8px 10px; border-top:1px solid var(--border); background:#fafafa; }
+#qa-input { flex:1; border:1px solid var(--border2); border-radius:4px; padding:6px 8px; font-size:12px; font-family:var(--sans); resize:none; outline:none; min-height:32px; max-height:80px; }
+#qa-input:focus { border-color:var(--accent); }
+#qa-send { background:var(--accent); color:#fff; border:none; border-radius:4px; padding:6px 12px; font-size:11px; font-weight:600; cursor:pointer; white-space:nowrap; font-family:var(--sans); }
+#qa-send:disabled { opacity:.5; cursor:not-allowed; }
+#qa-minimized {
+  width:44px; height:44px; background:var(--accent); color:#fff; border-radius:50%;
+  display:flex; align-items:center; justify-content:center; font-size:18px; cursor:pointer;
+  box-shadow:0 2px 10px rgba(0,0,0,0.2); transition:transform .15s;
+}
+#qa-minimized:hover { transform:scale(1.1); }
 .toast { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); background:#333; color:#fff; border-radius:20px; padding:7px 16px; font-size:12px; opacity:0; transition:opacity .25s; pointer-events:none; white-space:nowrap; z-index:200 }
 .toast.on { opacity:1 }
 </style>
@@ -353,6 +384,7 @@ body.modal-open { overflow:hidden; }
 <div class="shell">
 
 <header class="topbar">
+  <button id="sb-toggle" style="background:none;border:none;font-size:16px;cursor:pointer;padding:2px 6px;color:var(--text2);line-height:1">☰</button>
   <div class="logo">nb<span>.</span>quiz</div>
   <select id="file-select" style="max-width:180px;font-family:var(--sans);font-size:11px;padding:4px 6px;border:1px solid var(--border2);border-radius:var(--rs);background:#fff;color:var(--text);outline:none;cursor:pointer;overflow:hidden;text-overflow:ellipsis">
     <option value="">파일 선택...</option>
@@ -372,6 +404,7 @@ body.modal-open { overflow:hidden; }
       오답 복습 <span class="bk-cnt" id="bk-cnt" style="display:none">0</span>
     </button>
   </div>
+  <button id="reset-all-btn" style="font-size:10px;padding:3px 8px;background:none;border:1px solid var(--border2);border-radius:var(--rs);color:var(--text3);font-family:var(--sans);cursor:pointer;white-space:nowrap">⚠ 전체 초기화</button>
   <div style="width:10px"></div>
   <div class="score" id="score" style="display:none">
     <div class="sc">정답 <strong id="sc-c">0</strong></div>
@@ -448,7 +481,6 @@ body.modal-open { overflow:hidden; }
     <div id="flist"></div>
   </div>
   <div class="sb-footer">
-    <button class="btn-reset-all" id="reset-all-btn">⚠ 모든 파일 퀴즈 초기화</button>
     <div class="model-tag">claude-sonnet-4-6</div>
   </div>
 </aside>
@@ -480,6 +512,24 @@ body.modal-open { overflow:hidden; }
 </main>
 </div>
 <div class="toast" id="toast"></div>
+
+<!-- Q&A 플로팅 창 -->
+<div id="qa-panel" style="display:none">
+  <div id="qa-expanded">
+    <div id="qa-header">
+      <span>❓</span>
+      <span id="qa-header-title">셀 질문</span>
+      <button id="qa-min-btn" title="최소화">─</button>
+      <button id="qa-close-btn" title="닫기">✕</button>
+    </div>
+    <div id="qa-messages"></div>
+    <div id="qa-footer">
+      <textarea id="qa-input" rows="1" placeholder="이 셀에 대해 질문하세요..."></textarea>
+      <button id="qa-send">질문</button>
+    </div>
+  </div>
+  <div id="qa-minimized" style="display:none" title="Q&A 열기">❓</div>
+</div>
 
 <!-- Google Drive 파일 목록 모달 -->
 <div id="gdrive-modal" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:1000;padding:20px">
@@ -526,7 +576,7 @@ body.modal-open { overflow:hidden; }
 const $ = id => document.getElementById(id);
 
 // ── IndexedDB (파일 영구 저장) ──
-const DBNAME = 'nbquiz_db', DBVER = 4, STORE_NB = 'notebooks', STORE_POOL = 'pools', STORE_QUIZ = 'quizzes', STORE_INPUT = 'inputs';
+const DBNAME = 'nbquiz_db', DBVER = 5, STORE_NB = 'notebooks', STORE_POOL = 'pools', STORE_QUIZ = 'quizzes', STORE_INPUT = 'inputs', STORE_QA = 'qa';
 function openDB() {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DBNAME, DBVER);
@@ -536,6 +586,7 @@ function openDB() {
       if (!db.objectStoreNames.contains(STORE_POOL)) db.createObjectStore(STORE_POOL);
       if (!db.objectStoreNames.contains(STORE_QUIZ)) db.createObjectStore(STORE_QUIZ);
       if (!db.objectStoreNames.contains(STORE_INPUT)) db.createObjectStore(STORE_INPUT);
+      if (!db.objectStoreNames.contains(STORE_QA)) db.createObjectStore(STORE_QA);
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -579,6 +630,15 @@ function dbSaveQuiz(name, quiz) { return dbPut(STORE_QUIZ, name, quiz); }
 function dbDeleteQuiz(name) { return Promise.all([dbDel(STORE_QUIZ, name), dbDel(STORE_INPUT, name)]); }
 function dbSaveInputs(name, data) { return dbPut(STORE_INPUT, name, data); }
 function dbLoadInputs() { return dbGetAll(STORE_INPUT); }
+function dbSaveQa(key, history) { return dbPut(STORE_QA, key, history); }
+function dbDeleteQaForFile(fileName) {
+  // key가 "fileName::cellIdx" 형태 → 해당 파일의 모든 Q&A 삭제
+  return dbGetAll(STORE_QA).then(all => {
+    const prefix = fileName + '::';
+    return Promise.all(Object.keys(all).filter(k => k.startsWith(prefix)).map(k => dbDel(STORE_QA, k)));
+  });
+}
+function dbLoadAllQa() { return dbGetAll(STORE_QA); }
 function dbLoadAll() { return dbGetAll(STORE_NB); }
 function dbLoadPools() { return dbGetAll(STORE_POOL); }
 function dbLoadQuizzes() { return dbGetAll(STORE_QUIZ); }
@@ -854,6 +914,14 @@ $('consec-btn').addEventListener('click', () => {
 const savedKey = localStorage.getItem('nbq_key');
 if (savedKey) $('api-key').value = savedKey;
 $('api-key').addEventListener('input', () => { localStorage.setItem('nbq_key', $('api-key').value.trim()); ready(); });
+// 사이드바 토글
+$('sb-toggle').addEventListener('click', () => {
+  document.querySelector('.shell').classList.toggle('sb-hidden');
+  const hidden = document.querySelector('.shell').classList.contains('sb-hidden');
+  localStorage.setItem('nbq_sb_hidden', hidden ? '1' : '');
+});
+if (localStorage.getItem('nbq_sb_hidden') === '1') document.querySelector('.shell').classList.add('sb-hidden');
+
 $('file-select').addEventListener('change', () => {
   const name = $('file-select').value;
   if (!name || !files[name]) return;
@@ -969,7 +1037,7 @@ function fileStatusInfo(name) {
 
 function renderFList() {
   const el = $('flist'); el.innerHTML = '';
-  Object.keys(files).forEach(name => {
+  Object.keys(files).sort().forEach(name => {
     const d = document.createElement('div');
     d.className = 'fi' + (name === activeFile ? ' on' : '');
     const { cls, icon, label } = fileStatusInfo(name);
@@ -989,7 +1057,10 @@ function renderFList() {
       e.stopPropagation();
       generatingFiles.delete(name);
       delete files[name]; delete quizCache[name]; delete linePool[name]; delete lineHistory[name]; delete quizDomCache[name]; delete quizScrollCache[name];
+      // Q&A 이력 삭제 (메모리 + DB)
+      Object.keys(qaHistory).filter(k => k.startsWith(name + '::')).forEach(k => delete qaHistory[k]);
       dbDelete(name).catch(e => dbg('dbDelete error: ' + e.message));
+      dbDeleteQaForFile(name).catch(e => dbg('dbDeleteQa error: ' + e.message));
       activeFile = Object.keys(files)[0] || null;
       renderFList(); ready();
       if (activeFile) showFileQuiz(activeFile);
@@ -1000,7 +1071,7 @@ function renderFList() {
   // topbar 파일 select 동기화
   const sel = $('file-select');
   sel.innerHTML = '<option value="">파일 선택...</option>';
-  Object.keys(files).forEach(name => {
+  Object.keys(files).sort().forEach(name => {
     const opt = document.createElement('option');
     opt.value = name; opt.textContent = name;
     if (name === activeFile) opt.selected = true;
@@ -1092,7 +1163,10 @@ function rebindQuizEvents(container) {
   });
   // 북마크 + 정답 토글 버튼
   container.querySelectorAll('.bk-btn').forEach(btn => {
-    if (btn.dataset.revealing !== undefined) {
+    if (btn.dataset.cellIdx !== undefined) {
+      // Q&A 버튼
+      btn.onclick = () => openQaPanel(parseInt(btn.dataset.cellIdx));
+    } else if (btn.dataset.revealing !== undefined) {
       // 정답 토글 버튼
       const cellWrap = btn.closest('.cell');
       btn.onclick = () => toggleCellReveal(cellWrap, btn);
@@ -1633,6 +1707,10 @@ function renderQuiz(strippedCells, blanks) {
       rvb.dataset.revealing='false';
       rvb.addEventListener('click', () => toggleCellReveal(wrap, rvb));
       gutter.appendChild(rvb);
+      const qab=document.createElement('button'); qab.className='bk-btn'; qab.title='질문하기'; qab.textContent='❓';
+      qab.dataset.cellIdx=cell.idx;
+      qab.addEventListener('click', () => openQaPanel(cell.idx));
+      gutter.appendChild(qab);
     }
     wrap.appendChild(gutter);
     const inner = document.createElement('div'); inner.className = 'cell-inner';
@@ -1725,6 +1803,10 @@ function renderQuizEasy(strippedCells, easyBlanks, container) {
       rvb.dataset.revealing='false';
       rvb.addEventListener('click', () => toggleCellReveal(wrap, rvb));
       gutter.appendChild(rvb);
+      const qab=document.createElement('button'); qab.className='bk-btn'; qab.title='질문하기'; qab.textContent='❓';
+      qab.dataset.cellIdx=cell.idx;
+      qab.addEventListener('click', () => openQaPanel(cell.idx));
+      gutter.appendChild(qab);
     }
     wrap.appendChild(gutter);
     const inner=document.createElement('div'); inner.className='cell-inner';
@@ -2180,10 +2262,116 @@ document.addEventListener('visibilitychange', () => {
 });
 window.addEventListener('beforeunload', saveAllInputs);
 
+// ── 셀별 Q&A ──
+const qaHistory = {}; // "file::cellIdx" → [{q, a}]
+let qaCurrentKey = null;
+
+function openQaPanel(cellIdx) {
+  const key = activeFile + '::' + cellIdx;
+  qaCurrentKey = key;
+  if (!qaHistory[key]) qaHistory[key] = [];
+  $('qa-header-title').textContent = '셀 #' + cellIdx + ' 질문';
+  renderQaMessages();
+  $('qa-panel').style.display = 'block';
+  $('qa-expanded').style.display = 'flex';
+  $('qa-minimized').style.display = 'none';
+  $('qa-input').value = '';
+  $('qa-input').focus();
+}
+
+function minimizeQa() {
+  $('qa-expanded').style.display = 'none';
+  $('qa-minimized').style.display = 'flex';
+}
+
+function expandQa() {
+  $('qa-expanded').style.display = 'flex';
+  $('qa-minimized').style.display = 'none';
+  renderQaMessages();
+}
+
+function closeQa() {
+  $('qa-panel').style.display = 'none';
+  qaCurrentKey = null;
+}
+
+function renderQaMessages() {
+  const el = $('qa-messages');
+  el.innerHTML = '';
+  const history = qaHistory[qaCurrentKey] || [];
+  history.forEach(item => {
+    const q = document.createElement('div'); q.className = 'qa-q'; q.textContent = item.q;
+    el.appendChild(q);
+    const a = document.createElement('div');
+    if (item.a === null) { a.className = 'qa-a qa-loading'; a.textContent = '답변 생성 중...'; }
+    else { a.className = 'qa-a'; a.textContent = item.a; }
+    el.appendChild(a);
+  });
+  el.scrollTop = el.scrollHeight;
+}
+
+async function sendQaQuestion() {
+  const question = $('qa-input').value.trim();
+  if (!question || !qaCurrentKey || !activeFile) return;
+
+  const key = qaCurrentKey;
+  const cellIdx = parseInt(key.split('::')[1]);
+  const cell = files[activeFile]?.strippedCells?.find(c => c.idx === cellIdx);
+  if (!cell) { toast('⚠ 셀을 찾을 수 없습니다'); return; }
+
+  const apiKey = $('api-key').value.trim();
+  if (!apiKey) { toast('⚠ API 키를 입력해주세요'); return; }
+
+  qaHistory[key].push({ q: question, a: null });
+  $('qa-input').value = '';
+  $('qa-send').disabled = true;
+  renderQaMessages();
+
+  try {
+    const { notebookContent } = buildPoolPrompt(files[activeFile].strippedCells);
+    const prompt = notebookContent + '\n\n---\n위 노트북의 셀 #' + cellIdx + ' 코드:\n' + cell.src + '\n\n---\n학습자 질문: ' + question + '\n\n이 셀의 코드에 대해 친절하고 정확하게 답변해주세요. 한국어로 답변하세요.';
+
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 2048,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const d = await res.json();
+    const answer = d.content[0].text.trim();
+    const last = qaHistory[key][qaHistory[key].length - 1];
+    if (last && last.a === null) last.a = answer;
+  } catch(e) {
+    const last = qaHistory[key][qaHistory[key].length - 1];
+    if (last && last.a === null) last.a = '⚠ 오류: ' + e.message;
+  }
+  $('qa-send').disabled = false;
+  if (qaCurrentKey === key) renderQaMessages();
+  // IndexedDB에 저장
+  dbSaveQa(key, qaHistory[key]).catch(e => dbg('dbSaveQa error: ' + e.message));
+}
+
+$('qa-min-btn').addEventListener('click', minimizeQa);
+$('qa-close-btn').addEventListener('click', closeQa);
+$('qa-minimized').addEventListener('click', expandQa);
+$('qa-send').addEventListener('click', sendQaQuestion);
+$('qa-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendQaQuestion(); }
+});
+
 updateBkBadge(); ready();
 
 // ── IndexedDB에서 파일 + pool 복원 ──
-Promise.all([dbLoadAll(), dbLoadPools(), dbLoadQuizzes(), dbLoadInputs()]).then(([savedFiles, savedPools, savedQuizzes, savedInputs]) => {
+Promise.all([dbLoadAll(), dbLoadPools(), dbLoadQuizzes(), dbLoadInputs(), dbLoadAllQa()]).then(([savedFiles, savedPools, savedQuizzes, savedInputs, savedQa]) => {
   let count = 0;
   Object.entries(savedFiles).forEach(([name, nb]) => {
     if (!nb.cells) return;
@@ -2216,6 +2404,11 @@ Promise.all([dbLoadAll(), dbLoadPools(), dbLoadQuizzes(), dbLoadInputs()]).then(
         setTimeout(() => restoreInputState(activeFile, savedInputs[activeFile]), 50);
       }
     }
+    // Q&A 이력 복원
+    Object.entries(savedQa).forEach(([key, history]) => {
+      const fileName = key.split('::')[0];
+      if (files[fileName]) qaHistory[key] = history;
+    });
     toast('✓ ' + count + '개 파일 복원됨' + (quizCount ? ' (퀴즈 ' + quizCount + '개)' : ''));
   }
 }).catch(e => dbg('dbLoad error: ' + e.message));
