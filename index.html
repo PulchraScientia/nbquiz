@@ -45,7 +45,7 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text); min-hei
 /* ── layout ── */
 .shell { display:grid; grid-template-columns:260px 1fr; grid-template-rows:48px 1fr; min-height:100vh; transition:grid-template-columns .2s }
 .shell.sb-hidden { grid-template-columns:0px 1fr }
-.shell.sb-hidden .sidebar { display:none; width:0; overflow:hidden }
+.shell.sb-hidden .sidebar { visibility:hidden; overflow:hidden; padding:0; border:none; min-width:0 }
 @media(max-width:768px) { .shell { grid-template-columns:1fr } }
 
 /* ── topbar — Jupyter menubar style ── */
