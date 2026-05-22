@@ -220,14 +220,18 @@ body.modal-open { overflow:hidden; }
 /* ── Jupyter-style cells ── */
 .cell {
   display:flex; margin-bottom:4px;
-  border-radius:var(--r); overflow:hidden;
+  border-radius:var(--r);
 }
 .cell-gutter {
   width:64px; min-width:64px; background:#f5f5f5;
   border:1px solid var(--border); border-right:none;
+  padding:0;
+  border-radius:var(--r) 0 0 var(--r);
+}
+.gutter-inner {
+  position:sticky; top:52px;
   display:flex; flex-direction:column; align-items:flex-end;
   padding:10px 6px 10px 0; gap:4px;
-  border-radius:var(--r) 0 0 var(--r);
 }
 .cell-exec-num {
   font-family:var(--mono); font-size:11px; color:var(--text3);
@@ -1704,9 +1708,10 @@ function renderQuiz(strippedCells, blanks) {
     const wrap = document.createElement('div');
     wrap.className = 'cell' + (hasBlank ? ' has-blank' : '');
     const gutter = document.createElement('div'); gutter.className = 'cell-gutter';
+    const gi = document.createElement('div'); gi.className = 'gutter-inner';
     const execNum = document.createElement('div'); execNum.className = 'cell-exec-num';
     execNum.textContent = cell.type === 'code' ? '[ '+cell.idx+' ]' : '';
-    gutter.appendChild(execNum);
+    gi.appendChild(execNum);
     if (hasBlank) {
       const bkb = document.createElement('button');
       bkb.className = 'bk-btn' + (isBookmarked(cell.idx) ? ' on' : '');
@@ -1715,16 +1720,17 @@ function renderQuiz(strippedCells, blanks) {
         const origSrc = files[activeFile].strippedCells[cell.idx]?.src || cell.src;
         toggleBk({ idx: cell.idx, src: origSrc }, bmap[cell.idx], bkb);
       });
-      gutter.appendChild(bkb);
+      gi.appendChild(bkb);
       const rvb=document.createElement('button'); rvb.className='bk-btn'; rvb.title='정답 보기'; rvb.textContent='💡';
       rvb.dataset.revealing='false';
       rvb.addEventListener('click', () => toggleCellReveal(wrap, rvb));
-      gutter.appendChild(rvb);
+      gi.appendChild(rvb);
       const qab=document.createElement('button'); qab.className='bk-btn'; qab.title='질문하기'; qab.textContent='❓';
       qab.dataset.cellIdx=cell.idx;
       qab.addEventListener('click', () => openQaPanel(cell.idx, qab));
-      gutter.appendChild(qab);
+      gi.appendChild(qab);
     }
+    gutter.appendChild(gi);
     wrap.appendChild(gutter);
     const inner = document.createElement('div'); inner.className = 'cell-inner';
 
@@ -1804,23 +1810,25 @@ function renderQuizEasy(strippedCells, easyBlanks, container) {
     const wrap = document.createElement('div');
     wrap.className = 'cell' + (hasBlank ? ' has-blank' : '');
     const gutter = document.createElement('div'); gutter.className='cell-gutter';
+    const gi = document.createElement('div'); gi.className='gutter-inner';
     const execNum = document.createElement('div'); execNum.className='cell-exec-num';
     execNum.textContent = cell.type==='code' ? '[ '+cell.idx+' ]' : '';
-    gutter.appendChild(execNum);
+    gi.appendChild(execNum);
     if (hasBlank) {
       const bkb=document.createElement('button'); bkb.className='bk-btn'+(isBookmarked(cell.idx)?' on':'');
       bkb.title='오답 복습에 저장'; bkb.textContent='🔖';
       bkb.addEventListener('click',()=>{ const s=files[activeFile].strippedCells[cell.idx]?.src||cell.src; toggleBk({idx:cell.idx,src:s},cellBlanks,bkb); });
-      gutter.appendChild(bkb);
+      gi.appendChild(bkb);
       const rvb=document.createElement('button'); rvb.className='bk-btn'; rvb.title='정답 보기'; rvb.textContent='💡';
       rvb.dataset.revealing='false';
       rvb.addEventListener('click', () => toggleCellReveal(wrap, rvb));
-      gutter.appendChild(rvb);
+      gi.appendChild(rvb);
       const qab=document.createElement('button'); qab.className='bk-btn'; qab.title='질문하기'; qab.textContent='❓';
       qab.dataset.cellIdx=cell.idx;
       qab.addEventListener('click', () => openQaPanel(cell.idx, qab));
-      gutter.appendChild(qab);
+      gi.appendChild(qab);
     }
+    gutter.appendChild(gi);
     wrap.appendChild(gutter);
     const inner=document.createElement('div'); inner.className='cell-inner';
 
