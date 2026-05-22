@@ -577,6 +577,7 @@ body.modal-open { overflow:hidden; }
 </div>
 
 <script src="https://cdn.jsdelivr.net/pyodide/v0.25.1/full/pyodide.js"></script>
+<script src="prompts.js"></script>
 <script>
 const $ = id => document.getElementById(id);
 
@@ -1251,22 +1252,7 @@ ${md}
 ## 코드 셀:
 ${code}`;
 
-  const instruction = `## 지시:
-각 코드 셀에서 빈칸 문제로 낼 수 있는 "출제 가능한 줄" 목록을 추출하세요.
-
-출제 가능 기준: 학습자가 직접 작성해야 할 핵심 로직 줄.
-출제 불가 (반드시 제외):
-- print/display/plt/logging 등 출력/시각화 줄
-- import 문
-- 빈 줄, pass, break, continue 단독 줄
-- 단순 trivial 할당 (x=1, name="abc")
-- CUDA 체크, pip install, Drive 마운트 셀 전체
-- 독스트링(""") 줄
-
-각 줄마다 난이도 태깅: "easy"(단순 파라미터/값) "medium"(핵심로직) "hard"(복잡구현).
-
-순수 JSON만 응답:
-{"pool":[{"cell_idx":<int>,"line":"<들여쓰기 포함 전체 줄>","diff":"easy"|"medium"|"hard"}]}`;
+  const instruction = PROMPTS.poolInstruction;
 
   return { notebookContent, instruction };
 }
@@ -1386,8 +1372,7 @@ function buildEasyAnnotatePrompt(easyBlanks) {
     const toks = b.tokens.map(t=>t.text).join(', ');
     return '[' + (i+1) + '] ' + JSON.stringify(preview) + ' 빈칸토큰:[' + toks + ']';
   }).join('\n');
-  return '아래 Python 코드 줄들에서 특정 토큰이 빈칸으로 제시됩니다.\nreason(왜 중요한지)과 hint(역할 단서, 정답 직접 금지)를 생성하세요.\n\n'
-    + items + '\n\n순수 JSON만 응답:\n{"annotations":[{"idx":<1부터>,"reason":"<한 줄>","hint":"<힌트>"}]}';
+  return items + '\n\n' + PROMPTS.easyAnnotateInstruction;
 }
 
 
@@ -1396,12 +1381,7 @@ function buildAnnotatePrompt(selectedLines) {
   const linesText = selectedLines.map((l,i) =>
     `[${i+1}] 셀#${l.cell_idx}: ${JSON.stringify(l.line)}`
   ).join('\n');
-  return `아래 Python 코드 줄들에 대해 학습자에게 보여줄 reason과 hint를 생성하세요.
-
-${linesText}
-
-순수 JSON만 응답:
-{"annotations":[{"idx":<1부터 시작하는 번호>,"reason":"<왜 중요한지 한 줄>","hint":<"힌트 한 줄" 또는 null>}]}`;
+  return linesText + '\n\n' + PROMPTS.annotateInstruction;
 }
 
 // ── 히스토리 기반 랜덤 샘플링 ──
