@@ -2297,17 +2297,26 @@ document.querySelector('.main').addEventListener('scroll', () => {
     gutterRaf = null;
     const topLimit = 52; // topbar 높이
     document.querySelectorAll('.gutter-inner').forEach(gi => {
-      const gutter = gi.parentElement;
-      const cell = gutter.parentElement;
+      const cell = gi.closest('.cell');
+      if (!cell) return;
       const cellRect = cell.getBoundingClientRect();
-      const gutterH = gi.offsetHeight;
-      // 셀이 화면 위로 벗어났을 때만 이동
-      if (cellRect.top < topLimit && cellRect.bottom > topLimit + gutterH + 10) {
-        const offset = topLimit - cellRect.top;
-        gi.style.transform = 'translateY(' + offset + 'px)';
-      } else {
+      const giH = gi.offsetHeight;
+
+      // 셀 상단이 아직 topbar에 도달 안 함 → 원래 위치
+      if (cellRect.top >= topLimit) {
         gi.style.transform = '';
+        return;
       }
+
+      // 셀 상단이 topbar를 넘어감 → 따라 내려가기
+      let offset = topLimit - cellRect.top;
+
+      // 마지막 버튼이 셀 밖으로 나가지 않도록 제한
+      const maxOffset = cellRect.height - giH;
+      if (maxOffset <= 0) { gi.style.transform = ''; return; }
+      if (offset > maxOffset) offset = maxOffset;
+
+      gi.style.transform = 'translateY(' + offset + 'px)';
     });
   });
 });
