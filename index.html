@@ -2683,7 +2683,11 @@ function showGDriveModal(items) {
     d.appendChild(cb);
     const rest = document.createElement('div');
     rest.style.cssText = 'flex:1;overflow:hidden;display:flex;align-items:center;gap:10px';
-    rest.innerHTML = `<span style="font-size:16px;flex-shrink:0">📓</span><div style="flex:1;overflow:hidden"><div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#111">${escH(f.name)}</div><div style="font-size:11px;color:#888;margin-top:1px">${new Date(f.modifiedTime).toLocaleString('ko-KR',{dateStyle:'short',timeStyle:'short'})}</div></div>`;
+    const displayName = f.name.endsWith('.ipynb') ? f.name : f.name + '.ipynb';
+    const alreadyLoaded = !!window.files[displayName] || !!window.files[f.name];
+    const icon = alreadyLoaded ? '📗' : '📓';
+    const badge = alreadyLoaded ? '<span style="font-size:10px;color:#2e7d32;background:#e8f5e9;padding:1px 5px;border-radius:2px;margin-left:6px;flex-shrink:0">로드됨</span>' : '';
+    rest.innerHTML = `<span style="font-size:16px;flex-shrink:0">${icon}</span><div style="flex:1;overflow:hidden"><div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#111">${escH(f.name)}${badge}</div><div style="font-size:11px;color:#888;margin-top:1px">${new Date(f.modifiedTime).toLocaleString('ko-KR',{dateStyle:'short',timeStyle:'short'})}</div></div>`;
     rest.addEventListener('click', () => { cb.checked = !cb.checked; cb.dispatchEvent(new Event('change')); });
     d.appendChild(rest);
     d.addEventListener('mouseenter', () => { d.style.background = '#f5f5f5'; });
