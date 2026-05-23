@@ -2665,6 +2665,7 @@ function showGDriveModal(items) {
 
   // 파일 항목 (체크박스 포함)
   const driveSelected = new Map(); // id → {id, name}
+  let batchBtn = null;
   files.forEach(f => {
     const d = document.createElement('div');
     d.style.cssText = 'padding:10px 14px;border-bottom:1px solid #f0f0f0;cursor:pointer;display:flex;align-items:center;gap:10px;transition:background .1s';
@@ -2673,8 +2674,10 @@ function showGDriveModal(items) {
     cb.addEventListener('change', () => {
       if (cb.checked) driveSelected.set(f.id, f);
       else driveSelected.delete(f.id);
-      batchBtn.textContent = driveSelected.size > 0 ? '선택 파일 가져오기 (' + driveSelected.size + ')' : '선택 파일 가져오기';
-      batchBtn.disabled = driveSelected.size === 0;
+      if (batchBtn) {
+        batchBtn.textContent = driveSelected.size > 0 ? '선택 파일 가져오기 (' + driveSelected.size + ')' : '선택 파일 가져오기';
+        batchBtn.disabled = driveSelected.size === 0;
+      }
     });
     cb.addEventListener('click', e => e.stopPropagation());
     d.appendChild(cb);
@@ -2708,7 +2711,7 @@ function showGDriveModal(items) {
     footer.appendChild(selAllLabel);
     const spacer = document.createElement('div'); spacer.style.flex = '1';
     footer.appendChild(spacer);
-    const batchBtn = document.createElement('button');
+    batchBtn = document.createElement('button');
     batchBtn.textContent = '선택 파일 가져오기';
     batchBtn.disabled = true;
     batchBtn.style.cssText = 'background:#1a73e8;color:#fff;border:none;border-radius:4px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--sans);white-space:nowrap';
