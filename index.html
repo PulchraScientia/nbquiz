@@ -2089,13 +2089,14 @@ $('reset-btn').addEventListener('click', () => {
   updateScore();
 });
 
+let restoring = false;
 function updateScore() {
   const all = document.querySelectorAll('.bl-field,.tok-blank').length;
   const c   = document.querySelectorAll('.bl-field.ok,.tok-blank.ok').length;
   const tried=document.querySelectorAll('.bl-field.ok,.bl-field.no,.bl-field.show,.tok-blank.ok,.tok-blank.no,.tok-blank.show').length;
   const rem = all - document.querySelectorAll('.bl-field.ok,.bl-field.show,.tok-blank.ok,.tok-blank.show').length;
   $('sc-c').textContent=c; $('sc-t').textContent=tried; $('sc-r').textContent=rem;
-  debouncedSaveInputs();
+  if (!restoring) debouncedSaveInputs();
 }
 
 // ── bookmarks ──
@@ -2502,11 +2503,19 @@ Promise.all([dbLoadAll(), dbLoadPools(), dbLoadQuizzes(), dbLoadInputs(), dbLoad
     if (!activeFile) activeFile = Object.keys(files)[0];
     renderFList(); ready();
     if (activeFile && quizCache[activeFile]) {
+      restoring = true;
       showFileQuiz(activeFile);
-      // 입력값 복원
+      // 입력값 복원 — renderQuiz 완료 후 실행
       if (savedInputs[activeFile]) {
-        setTimeout(() => restoreInputState(activeFile, savedInputs[activeFile]), 50);
-      }
+        const si = savedInputs[activeFile];
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            restoreInputState(activeFile, si);
+            restoring = false;
+            saveAllInputs();
+          });
+        });
+      } else { restoring = false; }
     }
     // 출제 히스토리 복원
     Object.entries(savedHists).forEach(([name, hist]) => {
