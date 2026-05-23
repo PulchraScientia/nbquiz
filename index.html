@@ -2265,17 +2265,13 @@ function restoreInputState(name, state) {
   updateScore();
 }
 
-let saveInputsTimer = null;
 function saveAllInputs() {
   if (activeFile && quizCache[activeFile]) {
     const state = collectInputState(activeFile);
     if (state) dbSaveInputs(activeFile, state).catch(e => dbg('dbSaveInputs error: ' + e.message));
   }
 }
-function debouncedSaveInputs() {
-  clearTimeout(saveInputsTimer);
-  saveInputsTimer = setTimeout(saveAllInputs, 1000);
-}
+function debouncedSaveInputs() { saveAllInputs(); }
 
 // 탭 전환/페이지 이탈 시 저장, 돌아올 때 스크롤 복원
 let savedScrollBeforeHide = null;
