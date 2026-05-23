@@ -663,7 +663,7 @@ const linePool = {};          // name → { pool: [{cell_idx, line}], generated:
 const lineHistory = {};       // name → Set of recently used "cell_idx::line" keys
 const quizCache = {};         // name → { blanks }
 const generatingFiles = new Set();
-let activeFile = null;
+let activeFile = localStorage.getItem('nbq_activeFile') || null;
 let consecutiveMode = false;
 let bookmarks = JSON.parse(localStorage.getItem('nbq_bk') || '[]');
 // Spaced Repetition data: { id → { easeFactor, interval, nextReview, reps } }
@@ -1114,6 +1114,7 @@ function renderFList() {
     if (name === activeFile) opt.selected = true;
     sel.appendChild(opt);
   });
+  if (activeFile) localStorage.setItem('nbq_activeFile', activeFile);
 }
 
 function ready() {
@@ -2509,7 +2510,8 @@ Promise.all([dbLoadAll(), dbLoadPools(), dbLoadQuizzes(), dbLoadInputs(), dbLoad
     if (files[name] && quiz.blanks) { quizCache[name] = quiz; quizCount++; }
   });
   if (count) {
-    if (!activeFile) activeFile = Object.keys(files)[0];
+    // 저장된 activeFile이 복원된 파일 목록에 없으면 첫 번째 파일로
+    if (!activeFile || !files[activeFile]) activeFile = Object.keys(files).sort()[0] || null;
     renderFList(); ready();
     if (activeFile && quizCache[activeFile]) {
       restoring = true;
