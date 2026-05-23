@@ -24,6 +24,7 @@ const PROMPTS = {
 - CUDA/device 설정, pip install, Drive 마운트
 - 독스트링(""") 줄
 - os, sys 등 기본 라이브러리 유틸 코드
+- \`return 변수\`, \`return 변수1, 변수2\` 등 단순 return문 (이미 만든 값을 반환하는 것뿐)
 
 ### 핵심 원칙:
 > 학습자가 외워야 할 것: **어떤 클래스/메서드를 쓰는지, 어떤 인자를 넣는지**

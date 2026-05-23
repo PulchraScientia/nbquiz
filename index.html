@@ -2384,29 +2384,54 @@ async function sendQaQuestion() {
     const { notebookContent } = buildPoolPrompt(files[activeFile].strippedCells);
     const cellQuestion = '위 노트북의 셀 #' + cellIdx + ' 코드:\n' + cell.src + '\n\n---\n학습자 질문: ' + question + '\n\n규칙:\n- 한국어로 답변\n- 3~5문장 이내로 핵심만 간결하게\n- 코드 예시는 최소한으로\n- 불필요한 서론/반복 금지';
 
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-beta': 'prompt-caching-2024-07-31',
-        'anthropic-dangerous-direct-browser-access': 'true'
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 2048,
-        messages: [{ role: 'user', content: [
-          { type: 'text', text: notebookContent, cache_control: { type: 'ephemeral' } },
-          { type: 'text', text: cellQuestion }
-        ]}]
-      })
+    const body = JSON.stringify({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 2048,
+      messages: [{ role: 'user', content: [
+        { type: 'text', text: notebookContent, cache_control: { type: 'ephemeral' } },
+        { type: 'text', text: cellQuestion }
+      ]}]
     });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const d = await res.json();
-    const answer = d.content[0].text.trim();
+    const headers = {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-beta': 'prompt-caching-2024-07-31',
+      'anthropic-dangerous-direct-browser-access': 'true'
+    };
+
+    let answer = null;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        const res = await fetch('https://api.anthropic.com/v1/messages', { method:'POST', headers, body });
+        if (res.status === 529 || res.status === 503 || res.status === 429) {
+          const wait = Math.min(2000 * Math.pow(2, attempt), 30000);
+          if (qaCurrentKey === key) {
+            const last2 = qaHistory[key][qaHistory[key].length - 1];
+            if (last2 && last2.a === null) last2.a = null;
+            renderQaMessages();
+            toast('⏳ 서버 과부하, ' + Math.round(wait/1000) + '초 후 재시도 (' + (attempt+1) + '/5)');
+          }
+          await new Promise(r => setTimeout(r, wait));
+          continue;
+        }
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const d = await res.json();
+        answer = (d.content[0]?.text || '').trim();
+        if (!answer || answer.length < 5) {
+          // 너무 짧은 응답 — 재시도
+          dbg('qa: too short response, retrying: ' + answer);
+          await new Promise(r => setTimeout(r, 1000));
+          continue;
+        }
+        break;
+      } catch(retryErr) {
+        if (attempt === 4) throw retryErr;
+        await new Promise(r => setTimeout(r, 2000 * Math.pow(2, attempt)));
+      }
+    }
     const last = qaHistory[key][qaHistory[key].length - 1];
-    if (last && last.a === null) last.a = answer;
+    if (last && last.a === null) last.a = answer || '⚠ 응답을 받지 못했습니다';
   } catch(e) {
     const last = qaHistory[key][qaHistory[key].length - 1];
     if (last && last.a === null) last.a = '⚠ 오류: ' + e.message;
