@@ -1140,14 +1140,16 @@ function showFileQuiz(name, prevFile) {
   if (quizCache[name]) {
     $('loading').classList.remove('on');
     const container = $('cells');
-    // 이전 파일의 DOM + 스크롤 위치 저장
     const mainEl = document.querySelector('.main');
-    if (prevFile && prevFile !== name && container.children.length) {
-      quizScrollCache[prevFile] = mainEl.scrollTop;
-      quizDomCache[prevFile] = container.cloneNode(true);
+    // 현재 표시 중인 파일의 DOM 저장 (어떤 파일이든)
+    const showing = $('qfile')?.textContent;
+    if (showing && showing !== name && showing !== '—' && container.children.length) {
+      quizScrollCache[showing] = mainEl.scrollTop;
+      const clone = container.cloneNode(true);
       const origInputs = container.querySelectorAll('input,textarea');
-      const clonedInputs = quizDomCache[prevFile].querySelectorAll('input,textarea');
-      origInputs.forEach((inp, i) => { if (clonedInputs[i]) clonedInputs[i].value = inp.value; });
+      const clonedInputs = clone.querySelectorAll('input,textarea');
+      origInputs.forEach((inp, i) => { if (clonedInputs[i]) { clonedInputs[i].value = inp.value; clonedInputs[i].disabled = inp.disabled; } });
+      quizDomCache[showing] = clone;
     }
     // 캐시된 DOM이 있으면 복원, 없으면 새로 렌더링
     if (quizDomCache[name]) {
@@ -2620,16 +2622,68 @@ function showGDriveModal(items) {
     list.appendChild(d);
   });
 
-  // 파일 항목
+  // 파일 항목 (체크박스 포함)
+  const driveSelected = new Map(); // id → {id, name}
   files.forEach(f => {
     const d = document.createElement('div');
     d.style.cssText = 'padding:10px 14px;border-bottom:1px solid #f0f0f0;cursor:pointer;display:flex;align-items:center;gap:10px;transition:background .1s';
-    d.innerHTML = `<span style="font-size:16px;flex-shrink:0">📓</span><div style="flex:1;overflow:hidden"><div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#111">${escH(f.name)}</div><div style="font-size:11px;color:#888;margin-top:1px">${new Date(f.modifiedTime).toLocaleString('ko-KR',{dateStyle:'short',timeStyle:'short'})}</div></div>`;
+    const cb = document.createElement('input');
+    cb.type = 'checkbox'; cb.style.cssText = 'flex-shrink:0;width:16px;height:16px;cursor:pointer';
+    cb.addEventListener('change', () => {
+      if (cb.checked) driveSelected.set(f.id, f);
+      else driveSelected.delete(f.id);
+      batchBtn.textContent = driveSelected.size > 0 ? '선택 파일 가져오기 (' + driveSelected.size + ')' : '선택 파일 가져오기';
+      batchBtn.disabled = driveSelected.size === 0;
+    });
+    cb.addEventListener('click', e => e.stopPropagation());
+    d.appendChild(cb);
+    const rest = document.createElement('div');
+    rest.style.cssText = 'flex:1;overflow:hidden;display:flex;align-items:center;gap:10px';
+    rest.innerHTML = `<span style="font-size:16px;flex-shrink:0">📓</span><div style="flex:1;overflow:hidden"><div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#111">${escH(f.name)}</div><div style="font-size:11px;color:#888;margin-top:1px">${new Date(f.modifiedTime).toLocaleString('ko-KR',{dateStyle:'short',timeStyle:'short'})}</div></div>`;
+    rest.addEventListener('click', () => { cb.checked = !cb.checked; cb.dispatchEvent(new Event('change')); });
+    d.appendChild(rest);
     d.addEventListener('mouseenter', () => { d.style.background = '#f5f5f5'; });
     d.addEventListener('mouseleave', () => { d.style.background = ''; });
-    d.addEventListener('click', () => { closeGDriveModal(); loadFromGDrive(f.id, f.name); });
     list.appendChild(d);
   });
+
+  // 일괄 가져오기 버튼
+  if (files.length > 0) {
+    const footer = document.createElement('div');
+    footer.style.cssText = 'padding:10px 14px;border-top:1px solid #eee;background:#fafafa;display:flex;gap:8px;align-items:center';
+    const selAllLabel = document.createElement('label');
+    selAllLabel.style.cssText = 'font-size:12px;color:var(--text2);cursor:pointer;display:flex;align-items:center;gap:4px';
+    const selAllCb = document.createElement('input');
+    selAllCb.type = 'checkbox'; selAllCb.style.cursor = 'pointer';
+    selAllCb.addEventListener('change', () => {
+      list.querySelectorAll('input[type=checkbox]').forEach(c => {
+        if (c === selAllCb) return;
+        c.checked = selAllCb.checked;
+        c.dispatchEvent(new Event('change'));
+      });
+    });
+    selAllLabel.appendChild(selAllCb);
+    selAllLabel.appendChild(document.createTextNode('전체 선택'));
+    footer.appendChild(selAllLabel);
+    const spacer = document.createElement('div'); spacer.style.flex = '1';
+    footer.appendChild(spacer);
+    const batchBtn = document.createElement('button');
+    batchBtn.textContent = '선택 파일 가져오기';
+    batchBtn.disabled = true;
+    batchBtn.style.cssText = 'background:#1a73e8;color:#fff;border:none;border-radius:4px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--sans);white-space:nowrap';
+    batchBtn.addEventListener('click', async () => {
+      const selected = [...driveSelected.values()];
+      closeGDriveModal();
+      toast('⏳ ' + selected.length + '개 파일 다운로드 중...');
+      let ok = 0;
+      for (const f of selected) {
+        try { await loadFromGDrive(f.id, f.name); ok++; } catch(e) { toast('⚠ ' + f.name + ' 실패'); }
+      }
+      if (ok > 1) toast('✓ ' + ok + '개 파일 로드 완료');
+    });
+    footer.appendChild(batchBtn);
+    list.appendChild(footer);
+  }
 
   $('gdrive-modal').classList.add('visible');
   document.body.classList.add('modal-open');
