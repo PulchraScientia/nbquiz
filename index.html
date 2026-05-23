@@ -2419,7 +2419,7 @@ async function sendQaQuestion() {
 
     const body = JSON.stringify({
       model: 'claude-sonnet-4-6',
-      max_tokens: 2048,
+      max_tokens: 4096,
       messages: [{ role: 'user', content: [
         { type: 'text', text: notebookContent, cache_control: { type: 'ephemeral' } },
         { type: 'text', text: cellQuestion }
@@ -2451,6 +2451,7 @@ async function sendQaQuestion() {
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const d = await res.json();
         answer = (d.content[0]?.text || '').trim();
+        if (d.stop_reason === 'max_tokens') answer += '\n\n_(응답이 길어서 잘렸습니다)_';
         if (!answer || answer.length < 5) {
           // 너무 짧은 응답 — 재시도
           dbg('qa: too short response, retrying: ' + answer);
