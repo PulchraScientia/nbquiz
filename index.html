@@ -1002,7 +1002,9 @@ $('paste-confirm').addEventListener('click', () => {
   if (!name.endsWith('.ipynb')) name += '.ipynb';
   if (!raw) { toast('⚠ 내용을 붙여넣어주세요'); $('paste-content').focus(); return; }
   try {
-    const nb = JSON.parse(raw);
+    let nb;
+    try { nb = JSON.parse(raw); }
+    catch(pe) { nb = JSON.parse(sanitizeNotebookJSON(raw)); }
     if (!nb.cells) { toast('⚠ 유효한 .ipynb 형식이 아닙니다'); return; }
     const strippedCells = nb.cells.map((c, i) => ({
       idx: i, type: c.cell_type,
@@ -1022,6 +1024,14 @@ $('paste-confirm').addEventListener('click', () => {
   }
 });
 
+// .ipynb 파일의 잘못된 JSON 이스케이프 문자 수정
+function sanitizeNotebookJSON(text) {
+  // JSON 표준에서 허용되지 않는 이스케이프 시퀀스를 수정
+  // 허용: \" \\ \/ \b \f \n \r \t \uXXXX
+  // 그 외 \x 형태는 \\x 로 변환 (백슬래시 리터럴로 처리)
+  return text.replace(/\\(?!["\\/bfnrtu])/g, '\\\\');
+}
+
 function loadFiles(list) {
   dbg('loadFiles called, count=' + (list ? list.length : 'null'));
   if (!list || list.length === 0) { toast('⚠ 파일을 선택해주세요'); return; }
@@ -1034,7 +1044,13 @@ function loadFiles(list) {
       try {
         const text = ev.target.result;
         dbg('read ok, length=' + text.length + ' first20=[' + text.slice(0,20) + ']');
-        const nb = JSON.parse(text);
+        let nb;
+        try {
+          nb = JSON.parse(text);
+        } catch(parseErr) {
+          dbg('first parse failed, trying sanitize: ' + parseErr.message);
+          nb = JSON.parse(sanitizeNotebookJSON(text));
+        }
         if (!nb.cells) {
           dbg('no cells key, keys=' + Object.keys(nb).join(','));
           toast('⚠ .ipynb 형식이 아닙니다: ' + f.name);
@@ -1058,7 +1074,7 @@ function loadFiles(list) {
         if (activeFile === displayName) showFileQuiz(displayName);
       } catch(e) {
         dbg('PARSE ERROR: ' + e.message);
-        toast('⚠ 파싱 실패: ' + f.name + ' (' + e.message + ')');
+        toast('⚠ [data] ' + f.name + ' 오류: ' + e.message);
       }
     };
     r.onerror = () => { dbg('FileReader onerror: ' + r.error); toast('⚠ 파일 읽기 실패: ' + f.name); };
@@ -2762,7 +2778,9 @@ async function loadFromGDrive(fileId, fileName) {
       throw new Error('HTTP ' + res.status);
     }
     const text = await res.text();
-    const nb = JSON.parse(text);
+    let nb;
+    try { nb = JSON.parse(text); }
+    catch(pe) { nb = JSON.parse(sanitizeNotebookJSON(text)); }
     if (!nb.cells) throw new Error('유효한 .ipynb 형식이 아닙니다');
     const strippedCells = nb.cells.map((c, i) => ({
       idx: i, type: c.cell_type,
