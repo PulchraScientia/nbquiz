@@ -396,6 +396,7 @@ body.modal-open { overflow:hidden; }
 <header class="topbar">
   <button id="sb-toggle" style="background:none;border:none;font-size:16px;cursor:pointer;padding:2px 6px;color:var(--text2);line-height:1">☰</button>
   <div class="logo">nb<span>.</span>quiz</div>
+  <span id="app-version" title="클릭하면 빌드 정보 표시" style="font-family:var(--mono);font-size:10px;color:var(--text3);background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:1px 7px;cursor:pointer;white-space:nowrap;line-height:1.6"></span>
   <select id="file-select" style="max-width:180px;font-family:var(--sans);font-size:11px;padding:4px 6px;border:1px solid var(--border2);border-radius:var(--rs);background:#fff;color:var(--text);outline:none;cursor:pointer;overflow:hidden;text-overflow:ellipsis">
     <option value="">파일 선택...</option>
   </select>
@@ -585,6 +586,17 @@ body.modal-open { overflow:hidden; }
 <script src="prompts.js"></script>
 <script>
 const $ = id => document.getElementById(id);
+
+// ── 앱 버전 ──
+// 수정해서 배포할 때마다 APP_VERSION 숫자를 올리세요 (GitHub deployment 번호와 맞추면 편함).
+const APP_VERSION = '0.46';
+const BUILD_DATE = '2026-05-26';
+(function showVersion() {
+  const el = $('app-version');
+  if (!el) return;
+  el.textContent = 'v' + APP_VERSION;
+  el.addEventListener('click', () => toast('nb.quiz v' + APP_VERSION + ' · build ' + BUILD_DATE));
+})();
 
 // ── IndexedDB (파일 영구 저장) ──
 const DBNAME = 'nbquiz_db', DBVER = 6, STORE_NB = 'notebooks', STORE_POOL = 'pools', STORE_QUIZ = 'quizzes', STORE_INPUT = 'inputs', STORE_QA = 'qa', STORE_HIST = 'history';
@@ -1187,6 +1199,12 @@ const quizScrollCache = {}; // name → scrollTop
 
 function showFileQuiz(name, prevFile) {
   if (!files[name]) return;
+  // 다른 파일로 전환하는데 Q&A 패널이 열려 있고 이전 파일을 가리키면 닫는다
+  // (cell 번호가 같을 때 이전 파일 Q&A가 잘못 보이는 문제 방지)
+  if (qaCurrentKey) {
+    const keyFile = qaCurrentKey.slice(0, qaCurrentKey.indexOf('::'));
+    if (keyFile !== name) closeQa();
+  }
   if (generatingFiles.has(name)) {
     $('empty').style.display='none';
     $('qpanel').classList.remove('on'); $('qpanel').style.display='none';
@@ -2426,6 +2444,10 @@ function minimizeQa() {
 }
 
 function expandQa() {
+  // qaCurrentKey가 가리키는 파일이 현재 보고 있는 파일과 다르면
+  // (최소화 상태로 파일을 전환한 경우) 엉뚱한 파일 내용이 보이므로 닫는다.
+  const keyFile = qaCurrentKey ? qaCurrentKey.slice(0, qaCurrentKey.indexOf('::')) : null;
+  if (!qaCurrentKey || keyFile !== activeFile) { closeQa(); return; }
   $('qa-expanded').style.display = 'flex';
   $('qa-minimized').style.display = 'none';
   renderQaMessages();
@@ -2456,7 +2478,7 @@ async function sendQaQuestion() {
   if (!question || !qaCurrentKey || !activeFile) return;
 
   const key = qaCurrentKey;
-  const cellIdx = parseInt(key.split('::')[1]);
+  const cellIdx = parseInt(key.slice(key.lastIndexOf('::') + 2));
   const cell = files[activeFile]?.strippedCells?.find(c => c.idx === cellIdx);
   if (!cell) { toast('⚠ 셀을 찾을 수 없습니다'); return; }
 
@@ -2590,7 +2612,7 @@ Promise.all([dbLoadAll(), dbLoadPools(), dbLoadQuizzes(), dbLoadInputs(), dbLoad
     });
     // Q&A 이력 복원
     Object.entries(savedQa).forEach(([key, history]) => {
-      const fileName = key.split('::')[0];
+      const fileName = key.slice(0, key.indexOf('::'));
       if (files[fileName]) qaHistory[key] = history;
     });
     toast('✓ ' + count + '개 파일 복원됨' + (quizCount ? ' (퀴즈 ' + quizCount + '개)' : ''));
